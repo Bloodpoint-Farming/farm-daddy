@@ -6,7 +6,7 @@ export const creatorChannels = sqliteTable('creator_channels', {
 	// The ID of the guild this channel belongs to
 	guildId: text('guild_id').notNull(),
 	// The default name template for created temporary channels
-	defaultName: text('default_name').notNull().default('{user}\'s Channel')
+	defaultName: text('default_name').notNull().default("{user}'s Channel")
 });
 
 export const tempChannels = sqliteTable('temp_channels', {

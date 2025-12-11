@@ -16,12 +16,16 @@ export class UserEvent extends Listener {
         if (oldState.channelId && oldState.channel) {
             // Check if the channel is empty
             if (oldState.channel.members.size === 0) {
-                const isTemp = await db.select().from(tempChannels).where(eq(tempChannels.id, oldState.channelId)).get();
+                const isTemp = await db
+                    .select()
+                    .from(tempChannels)
+                    .where(eq(tempChannels.id, BigInt(oldState.channelId)))
+                    .get();
                 if (isTemp) {
                     try {
                         this.container.logger.debug(`[VoiceStateUpdate] Deleting empty temp channel ${oldState.channelId}`);
                         await oldState.channel.delete();
-                        await db.delete(tempChannels).where(eq(tempChannels.id, oldState.channelId));
+                        await db.delete(tempChannels).where(eq(tempChannels.id, BigInt(oldState.channelId)));
                     } catch (error) {
                         this.container.logger.error('Error deleting temp channel:', error);
                     }
@@ -39,8 +43,11 @@ export class UserEvent extends Listener {
             }
 
             // Check if the joined channel is a creator channel
-
-            const result = await db.select().from(creatorChannels).where(eq(creatorChannels.id, newState.channelId)).get();
+            const result = await db
+                .select()
+                .from(creatorChannels)
+                .where(eq(creatorChannels.id, BigInt(newState.channelId)))
+                .get();
 
             if (result) {
                 try {
@@ -68,8 +75,8 @@ export class UserEvent extends Listener {
 
                     // Track in DB
                     await db.insert(tempChannels).values({
-                        id: newChannel.id,
-                        guildId: newState.guild.id,
+                        id: BigInt(newChannel.id),
+                        guildId: BigInt(newState.guild.id),
                         createdAt: new Date().toISOString()
                     });
 
@@ -77,7 +84,6 @@ export class UserEvent extends Listener {
                     await newChannel.send({
                         content: `Welcome ${member.toString()}! This is your temporary voice channel. You can manage it using the permissions I've given you.`
                     });
-
                 } catch (error) {
                     this.container.logger.error('Error creating temporary channel:', error);
                 }
