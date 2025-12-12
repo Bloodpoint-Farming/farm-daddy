@@ -1,9 +1,9 @@
 {
-  "name": "FarmBot",
+  "name": "farm-daddy",
   "version": "1.0.0",
   "main": "dist/index.js",
-  "author": "@sapphire",
-  "license": "UNLICENSE",
+  "author": "Bloodpoint Farming",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "@sapphire/decorators": "^6.1.1",
