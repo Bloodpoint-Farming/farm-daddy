@@ -4,8 +4,6 @@ import { LogLevel, SapphireClient } from '@sapphire/framework';
 import { GatewayIntentBits } from 'discord.js';
 
 const client = new SapphireClient({
-	defaultPrefix: '!',
-	caseInsensitiveCommands: true,
 	logger: {
 		level: LogLevel.Debug
 	},
