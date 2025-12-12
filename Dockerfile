@@ -8,15 +8,16 @@ ENV PATH="$PNPM_HOME:$PATH"
 ENV CI=true
 WORKDIR /app
 
-# Download all dependencies from the lock file into the docker build cache
-COPY pnpm-lock.yaml ./
+# Download all dependencies from the lock file into the docker build cache.
+# Include the pnpm-workspace.yaml so it doesn't complain about ignored build scripts.
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm fetch --frozen-lockfile
 
 # Set up the node-modules needed to build the project
 # Note that .npmrc is needed to "shamefully-hoist" to avoid symlinks
 # so that all node-modules are installed to the top level
-COPY package.json pnpm-workspace.yaml .npmrc ./
+COPY package.json .npmrc ./
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm install --frozen-lockfile --offline
 
