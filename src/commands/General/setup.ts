@@ -13,24 +13,30 @@ import { PLATFORMS, type PlatformKey } from '../../lib/platforms';
     requiredUserPermissions: [PermissionFlagsBits.Administrator],
     subcommands: [
         {
+            type: 'group',
             name: 'creator',
-            chatInputRun: 'chatInputCreator'
+            entries: [
+                {
+                    name: 'create',
+                    chatInputRun: 'chatInputCreator'
+                },
+                {
+                    name: 'message',
+                    chatInputRun: 'chatInputMessage'
+                },
+                {
+                    name: 'list',
+                    chatInputRun: 'chatInputList'
+                },
+                {
+                    name: 'remove',
+                    chatInputRun: 'chatInputRemove'
+                }
+            ]
         },
         {
             name: 'platform',
             chatInputRun: 'chatInputPlatform'
-        },
-        {
-            name: 'message',
-            chatInputRun: 'chatInputMessage'
-        },
-        {
-            name: 'list',
-            chatInputRun: 'chatInputList'
-        },
-        {
-            name: 'remove',
-            chatInputRun: 'chatInputRemove'
         }
     ]
 })
@@ -40,30 +46,64 @@ export class UserCommand extends Subcommand {
             builder
                 .setName(this.name)
                 .setDescription(this.description)
-                .addSubcommand((command) =>
-                    command
+                .addSubcommandGroup((group) =>
+                    group
                         .setName('creator')
-                        .setDescription('Setup a voice channel as a Creator Channel')
-                        .addChannelOption((option) =>
-                            option
-                                .setName('channel')
-                                .setDescription('The voice channel to designate')
-                                .addChannelTypes(ChannelType.GuildVoice)
-                                .setRequired(true)
+                        .setDescription('Manage creator channels')
+                        .addSubcommand((command) =>
+                            command
+                                .setName('create')
+                                .setDescription('Setup a voice channel as a Creator Channel')
+                                .addChannelOption((option) =>
+                                    option
+                                        .setName('channel')
+                                        .setDescription('The voice channel to designate')
+                                        .addChannelTypes(ChannelType.GuildVoice)
+                                        .setRequired(true)
+                                )
+                                .addStringOption((option) =>
+                                    option
+                                        .setName('template')
+                                        .setDescription('Default name template (use {user} for username)')
+                                        .setRequired(false)
+                                )
+                                .addIntegerOption((option) =>
+                                    option
+                                        .setName('limit')
+                                        .setDescription('Default user limit (0 for unlimited)')
+                                        .setMinValue(0)
+                                        .setMaxValue(99)
+                                        .setRequired(false)
+                                )
                         )
-                        .addStringOption((option) =>
-                            option
-                                .setName('template')
-                                .setDescription('Default name template (use {user} for username)')
-                                .setRequired(false)
+                        .addSubcommand((command) =>
+                            command
+                                .setName('message')
+                                .setDescription('Configure welcome message for a creator channel')
+                                .addChannelOption((option) =>
+                                    option
+                                        .setName('channel')
+                                        .setDescription('The creator channel to configure')
+                                        .addChannelTypes(ChannelType.GuildVoice)
+                                        .setRequired(true)
+                                )
                         )
-                        .addIntegerOption((option) =>
-                            option
-                                .setName('limit')
-                                .setDescription('Default user limit (0 for unlimited)')
-                                .setMinValue(0)
-                                .setMaxValue(99)
-                                .setRequired(false)
+                        .addSubcommand((command) =>
+                            command
+                                .setName('list')
+                                .setDescription('List all configured creator channels')
+                        )
+                        .addSubcommand((command) =>
+                            command
+                                .setName('remove')
+                                .setDescription('Un-track a creator channel')
+                                .addChannelOption((option) =>
+                                    option
+                                        .setName('channel')
+                                        .setDescription('The creator channel to remove')
+                                        .addChannelTypes(ChannelType.GuildVoice)
+                                        .setRequired(true)
+                                )
                         )
                 )
                 .addSubcommand((command) =>
@@ -86,35 +126,6 @@ export class UserCommand extends Subcommand {
                             option
                                 .setName('role')
                                 .setDescription('The role to associate with this platform')
-                                .setRequired(true)
-                        )
-                )
-                .addSubcommand((command) =>
-                    command
-                        .setName('message')
-                        .setDescription('Configure welcome message for a creator channel')
-                        .addChannelOption((option) =>
-                            option
-                                .setName('channel')
-                                .setDescription('The creator channel to configure')
-                                .addChannelTypes(ChannelType.GuildVoice)
-                                .setRequired(true)
-                        )
-                )
-                .addSubcommand((command) =>
-                    command
-                        .setName('list')
-                        .setDescription('List all configured creator channels')
-                )
-                .addSubcommand((command) =>
-                    command
-                        .setName('remove')
-                        .setDescription('Un-track a creator channel')
-                        .addChannelOption((option) =>
-                            option
-                                .setName('channel')
-                                .setDescription('The creator channel to remove')
-                                .addChannelTypes(ChannelType.GuildVoice)
                                 .setRequired(true)
                         )
                 )
