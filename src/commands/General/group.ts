@@ -6,6 +6,7 @@ import { db } from '../../db';
 import { creatorChannels, tempChannels } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { PLATFORMS, type PlatformKey } from '../../lib/platforms';
+import { formatChannelName } from '../../lib/channelName';
 
 @ApplyOptions<Subcommand.Options>({
     name: 'group',
@@ -119,14 +120,35 @@ export class UserCommand extends Subcommand {
         const channel = member.voice.channel;
 
         // Verify it is a tracked temporary channel
-        const isTemp = await db
+        const tempChannel = await db
             .select()
             .from(tempChannels)
             .where(eq(tempChannels.id, BigInt(channel.id)))
             .get();
 
-        if (!isTemp) {
+        if (!tempChannel) {
             return this.sendAttentionEmbed(interaction);
+        }
+
+        // Fetch the creator channel to get the template
+        if (!tempChannel.creatorChannelId) {
+            return interaction.reply({
+                content: 'Unable to determine the creator channel for this temporary channel.',
+                ephemeral: true
+            });
+        }
+
+        const creatorChannel = await db
+            .select()
+            .from(creatorChannels)
+            .where(eq(creatorChannels.id, tempChannel.creatorChannelId))
+            .get();
+
+        if (!creatorChannel) {
+            return interaction.reply({
+                content: 'Creator channel configuration not found.',
+                ephemeral: true
+            });
         }
 
         try {
@@ -136,19 +158,9 @@ export class UserCommand extends Subcommand {
                 .set({ platform: platformKey })
                 .where(eq(tempChannels.id, BigInt(channel.id)));
 
-            // Rename Channel
-            let newName = channel.name;
-            const shortName = PLATFORMS[platformKey].short;
-            const statusTag = `[${shortName}]`;
-
-            // Regex to find existing tag like [Steam] or [Xbox]
-            const tagRegex = /^\[.*?\]\s*/;
-            if (tagRegex.test(newName)) {
-                newName = newName.replace(tagRegex, `${statusTag} `);
-            } else {
-                newName = `${statusTag} ${newName}`;
-            }
-
+            // Regenerate channel name from template
+            const member = interaction.member as import('discord.js').GuildMember;
+            const newName = formatChannelName(creatorChannel.defaultName, member, platformKey);
             await channel.setName(newName);
 
             const embed = new EmbedBuilder()

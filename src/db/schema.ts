@@ -49,7 +49,9 @@ export const tempChannels = sqliteTable('temp_channels', {
 	// Timestamp when created
 	createdAt: text('created_at').notNull(),
 	// The platform associated with this channel (e.g. 'steam', 'xbox')
-	platform: text('platform')
+	platform: text('platform'),
+	// The ID of the creator channel that spawned this temp channel
+	creatorChannelId: snowflake('creator_channel_id')
 });
 
 export const platformRoles = sqliteTable('platform_roles', {

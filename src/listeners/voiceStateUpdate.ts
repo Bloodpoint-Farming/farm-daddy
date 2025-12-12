@@ -3,9 +3,10 @@ import { Listener } from '@sapphire/framework';
 import { ChannelType, PermissionFlagsBits, type VoiceState } from 'discord.js';
 import { db } from '../db';
 import { creatorChannels, tempChannels, platformRoles } from '../db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { stripIndents } from 'common-tags';
-import { PLATFORMS, type PlatformKey } from '../lib/platforms';
+import type { PlatformKey } from '../lib/platforms';
+import { formatChannelName } from '../lib/channelName';
 
 @ApplyOptions<Listener.Options>({
     event: 'voiceStateUpdate'
@@ -57,32 +58,23 @@ export class UserEvent extends Listener {
                     if (!member) return;
 
                     const parentCategory = newState.channel?.parent;
-                    let channelName = result.defaultName.replace('{user}', member.user.username);
+
+                    // Infer platform from user roles
                     let platformKey: PlatformKey | null = null;
+                    const userRoles = member.roles.cache.map((r) => BigInt(r.id));
+                    const matchingRoles = await db
+                        .select()
+                        .from(platformRoles)
+                        .where(eq(platformRoles.guildId, BigInt(newState.guild.id)))
+                        .all();
 
-                    // 1. Infer Platform from Roles
-                    const userRoleIds = member.roles.cache.map(r => BigInt(r.id));
-                    if (userRoleIds.length > 0) {
-                        const matches = await db
-                            .select()
-                            .from(platformRoles)
-                            .where(inArray(platformRoles.roleId, userRoleIds))
-                            .all();
-
-                        if (matches.length === 1) {
-                            // Single match - Auto-use this platform
-                            const match = matches[0];
-                            const key = match.platform as PlatformKey;
-                            if (PLATFORMS[key]) {
-                                platformKey = key;
-                                const shortName = PLATFORMS[key].short;
-                                channelName = `[${shortName}] ${channelName}`;
-                            }
-                        }
-                        // If 0 matches or >1 match, we don't set a default platform automatically
+                    const matches = matchingRoles.filter((pr) => userRoles.includes(pr.roleId));
+                    if (matches.length === 1) {
+                        platformKey = matches[0].platform as PlatformKey;
                     }
 
-                    // Create the new voice channel
+                    // Format channel name using helper
+                    const channelName = formatChannelName(result.defaultName, member, platformKey);
                     const newChannel = await newState.guild.channels.create({
                         name: channelName,
                         type: ChannelType.GuildVoice,
@@ -104,7 +96,8 @@ export class UserEvent extends Listener {
                         id: BigInt(newChannel.id),
                         guildId: BigInt(newState.guild.id),
                         createdAt: new Date().toISOString(),
-                        platform: platformKey // might be null
+                        platform: platformKey,
+                        creatorChannelId: result.id
                     });
 
                     // Get valid command IDs for clickable links
