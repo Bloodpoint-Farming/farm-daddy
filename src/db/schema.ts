@@ -29,5 +29,16 @@ export const tempChannels = sqliteTable('temp_channels', {
 	// The guild ID
 	guildId: snowflake('guild_id').notNull(),
 	// Timestamp when created
-	createdAt: text('created_at').notNull()
+	createdAt: text('created_at').notNull(),
+	// The platform associated with this channel (e.g. 'steam', 'xbox')
+	platform: text('platform')
+});
+
+export const platformRoles = sqliteTable('platform_roles', {
+	// The Role ID
+	roleId: snowflake('role_id').primaryKey(),
+	// The Guild ID
+	guildId: snowflake('guild_id').notNull(),
+	// The platform key (e.g. 'steam', 'xbox')
+	platform: text('platform').notNull()
 });

@@ -2,9 +2,10 @@ import { ApplyOptions } from '@sapphire/decorators';
 import { Listener } from '@sapphire/framework';
 import { ChannelType, PermissionFlagsBits, type VoiceState } from 'discord.js';
 import { db } from '../db';
-import { creatorChannels, tempChannels } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { creatorChannels, tempChannels, platformRoles } from '../db/schema';
+import { eq, inArray } from 'drizzle-orm';
 import { stripIndents } from 'common-tags';
+import { PLATFORMS, type PlatformKey } from '../lib/platforms';
 
 @ApplyOptions<Listener.Options>({
     event: 'voiceStateUpdate'
@@ -56,7 +57,30 @@ export class UserEvent extends Listener {
                     if (!member) return;
 
                     const parentCategory = newState.channel?.parent;
-                    const channelName = result.defaultName.replace('{user}', member.user.username);
+                    let channelName = result.defaultName.replace('{user}', member.user.username);
+                    let platformKey: PlatformKey | null = null;
+
+                    // 1. Infer Platform from Roles
+                    const userRoleIds = member.roles.cache.map(r => BigInt(r.id));
+                    if (userRoleIds.length > 0) {
+                        const matches = await db
+                            .select()
+                            .from(platformRoles)
+                            .where(inArray(platformRoles.roleId, userRoleIds))
+                            .all();
+
+                        if (matches.length === 1) {
+                            // Single match - Auto-use this platform
+                            const match = matches[0];
+                            const key = match.platform as PlatformKey;
+                            if (PLATFORMS[key]) {
+                                platformKey = key;
+                                const shortName = PLATFORMS[key].short;
+                                channelName = `[${shortName}] ${channelName}`;
+                            }
+                        }
+                        // If 0 matches or >1 match, we don't set a default platform automatically
+                    }
 
                     // Create the new voice channel
                     const newChannel = await newState.guild.channels.create({
@@ -78,18 +102,23 @@ export class UserEvent extends Listener {
                     await db.insert(tempChannels).values({
                         id: BigInt(newChannel.id),
                         guildId: BigInt(newState.guild.id),
-                        createdAt: new Date().toISOString()
+                        createdAt: new Date().toISOString(),
+                        platform: platformKey // might be null
                     });
 
-                    // Get valid command ID for clickable link
-                    const voiceCommand = this.container.client.application?.commands.cache.find((c) => c.name === 'group');
-                    const voiceLimitAction = voiceCommand ? `</group limit:${voiceCommand.id}>` : '`/group limit`';
+                    // Get valid command IDs for clickable links
+                    const groupCommand = this.container.client.application?.commands.cache.find((c) => c.name === 'group');
+                    const groupLimitAction = groupCommand ? `</group limit:${groupCommand.id}>` : '`/group limit`';
+                    const groupPlatformAction = groupCommand ? `</group platform:${groupCommand.id}>` : '`/group platform`';
+
+                    let welcomeContent = stripIndents`Welcome ${member.toString()}!
+                    # Commands
+                    - ${groupLimitAction} - set VC user limit
+                    - ${groupPlatformAction} - set platform`;
 
                     // Send a welcome message in the new channel (text chat)
                     await newChannel.send({
-                        content: stripIndents`Welcome ${member.toString()}!
-                        ## Commands
-                        - ${voiceLimitAction} - set group size`
+                        content: welcomeContent
                     });
                 } catch (error) {
                     this.container.logger.error('Error creating temporary channel:', error);

@@ -5,6 +5,7 @@ import { EmbedBuilder, Colors } from 'discord.js';
 import { db } from '../../db';
 import { creatorChannels, tempChannels } from '../../db/schema';
 import { eq } from 'drizzle-orm';
+import { PLATFORMS, type PlatformKey } from '../../lib/platforms';
 
 @ApplyOptions<Subcommand.Options>({
     name: 'group',
@@ -13,6 +14,10 @@ import { eq } from 'drizzle-orm';
         {
             name: 'limit',
             chatInputRun: 'chatInputLimit'
+        },
+        {
+            name: 'platform',
+            chatInputRun: 'chatInputPlatform'
         }
     ]
 })
@@ -33,6 +38,23 @@ export class UserCommand extends Subcommand {
                                 .setRequired(true)
                                 .setMinValue(1)
                                 .setMaxValue(99)
+                        )
+                )
+                .addSubcommand((command) =>
+                    command
+                        .setName('platform')
+                        .setDescription('Set the platform for your voice group')
+                        .addStringOption((option) =>
+                            option
+                                .setName('platform')
+                                .setDescription('The gaming platform')
+                                .setRequired(true)
+                                .addChoices(
+                                    ...Object.entries(PLATFORMS).map(([key, value]) => ({
+                                        name: value.label,
+                                        value: key
+                                    }))
+                                )
                         )
                 )
         );
@@ -83,12 +105,61 @@ export class UserCommand extends Subcommand {
             .setDescription(`You are not in a temporary voice channel. Join a creator channel first: ${mentions || 'None available'}.`)
             .setColor(Colors.Yellow);
 
-        // Using ephemeral: true because the user request implied a personal warning, though not explicitly requested as ephemeral.
-        // However, "respond with a warning embed" typically is visible.
-        // Given the previous command was ephemeral (setup), I'll stick to reply() which is public by default unless ephemeral is set.
-        // But warning messages are usually ephemeral to not clutter chat. 
-        // "If the user is not currently in a VC, respond with a warning embed".
-        // I will make it ephemeral to be safe/clean.
         return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    public async chatInputPlatform(interaction: Subcommand.ChatInputCommandInteraction) {
+        const member = interaction.guild?.members.cache.get(interaction.user.id);
+        const platformKey = interaction.options.getString('platform', true) as PlatformKey;
+
+        if (!member?.voice.channel) {
+            return this.sendAttentionEmbed(interaction);
+        }
+
+        const channel = member.voice.channel;
+
+        // Verify it is a tracked temporary channel
+        const isTemp = await db
+            .select()
+            .from(tempChannels)
+            .where(eq(tempChannels.id, BigInt(channel.id)))
+            .get();
+
+        if (!isTemp) {
+            return this.sendAttentionEmbed(interaction);
+        }
+
+        try {
+            // Update DB
+            await db
+                .update(tempChannels)
+                .set({ platform: platformKey })
+                .where(eq(tempChannels.id, BigInt(channel.id)));
+
+            // Rename Channel
+            let newName = channel.name;
+            const shortName = PLATFORMS[platformKey].short;
+            const statusTag = `[${shortName}]`;
+
+            // Regex to find existing tag like [Steam] or [Xbox]
+            const tagRegex = /^\[.*?\]\s*/;
+            if (tagRegex.test(newName)) {
+                newName = newName.replace(tagRegex, `${statusTag} `);
+            } else {
+                newName = `${statusTag} ${newName}`;
+            }
+
+            await channel.setName(newName);
+
+            const embed = new EmbedBuilder()
+                .setTitle('Platform Updated!')
+                .setDescription(`Platform set to **${PLATFORMS[platformKey].label}**.`)
+                .setColor(Colors.Green);
+
+            return interaction.reply({ embeds: [embed] });
+        } catch (error) {
+            this.container.logger.error(error);
+            return interaction.reply({ content: 'Failed to update platform. Rate limit or permissions?', ephemeral: true });
+        }
     }
 }
