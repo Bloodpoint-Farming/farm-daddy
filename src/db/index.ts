@@ -5,4 +5,5 @@ import { join } from 'path';
 import { rootDir } from '../lib/constants';
 
 const sqlite = new Database(join(rootDir, 'database.sqlite'));
+sqlite.defaultSafeIntegers(true); // BigInt support for discord snowflakes
 export const db: BetterSQLite3Database<typeof schema> = drizzle(sqlite, { schema });

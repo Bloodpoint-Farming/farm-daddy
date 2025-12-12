@@ -3,6 +3,7 @@ process.env.NODE_ENV ??= 'development';
 
 import { ApplicationCommandRegistries, RegisterBehavior } from '@sapphire/framework';
 import '@sapphire/plugin-logger/register';
+import '@sapphire/plugin-subcommands/register';
 import * as colorette from 'colorette';
 
 // Set default behavior to bulk overwrite
