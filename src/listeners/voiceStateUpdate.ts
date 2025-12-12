@@ -82,8 +82,8 @@ export class UserEvent extends Listener {
                     });
 
                     // Get valid command ID for clickable link
-                    const voiceCommand = this.container.client.application?.commands.cache.find((c) => c.name === 'voice');
-                    const voiceLimitAction = voiceCommand ? `</voice limit:${voiceCommand.id}>` : '`/voice limit`';
+                    const voiceCommand = this.container.client.application?.commands.cache.find((c) => c.name === 'group');
+                    const voiceLimitAction = voiceCommand ? `</group limit:${voiceCommand.id}>` : '`/group limit`';
 
                     // Send a welcome message in the new channel (text chat)
                     await newChannel.send({

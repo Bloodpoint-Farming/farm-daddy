@@ -7,8 +7,8 @@ import { creatorChannels, tempChannels } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 
 @ApplyOptions<Subcommand.Options>({
-    name: 'voice',
-    description: 'Manage your voice channel',
+    name: 'group',
+    description: 'Manage your group',
     subcommands: [
         {
             name: 'limit',
@@ -25,7 +25,7 @@ export class UserCommand extends Subcommand {
                 .addSubcommand((command) =>
                     command
                         .setName('limit')
-                        .setDescription('Set the user limit for your temporary voice channel')
+                        .setDescription('Set the user limit for your voice channel')
                         .addIntegerOption((option) =>
                             option
                                 .setName('number')
@@ -64,7 +64,7 @@ export class UserCommand extends Subcommand {
 
             const embed = new EmbedBuilder()
                 .setTitle('Updated!')
-                .setDescription(`User limit is now ${limit}.`)
+                .setDescription(`Group limit is now ${limit}.`)
                 .setColor(Colors.Green);
 
             return interaction.reply({ embeds: [embed] });
