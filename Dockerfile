@@ -6,6 +6,7 @@ RUN corepack enable
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV CI=true
+ENV npm_config_build_from_source=false
 WORKDIR /app
 
 # Download all dependencies from the lock file into the docker build cache.
