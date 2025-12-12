@@ -118,7 +118,8 @@ export class UserEvent extends Listener {
 
                     // Send a welcome message in the new channel (text chat)
                     await newChannel.send({
-                        content: welcomeContent
+                        content: welcomeContent,
+                        allowedMentions: { users: [] }
                     });
                 } catch (error) {
                     this.container.logger.error('Error creating temporary channel:', error);
