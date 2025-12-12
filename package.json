@@ -48,7 +48,8 @@
   "prettier": "@sapphire/prettier-config",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3"
+      "better-sqlite3",
+      "esbuild"
     ]
   },
   "engines": {
