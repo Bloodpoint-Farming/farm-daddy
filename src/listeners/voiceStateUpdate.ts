@@ -4,6 +4,7 @@ import { ChannelType, PermissionFlagsBits, type VoiceState } from 'discord.js';
 import { db } from '../db';
 import { creatorChannels, tempChannels } from '../db/schema';
 import { eq } from 'drizzle-orm';
+import { stripIndents } from 'common-tags';
 
 @ApplyOptions<Listener.Options>({
     event: 'voiceStateUpdate'
@@ -80,9 +81,15 @@ export class UserEvent extends Listener {
                         createdAt: new Date().toISOString()
                     });
 
+                    // Get valid command ID for clickable link
+                    const voiceCommand = this.container.client.application?.commands.cache.find((c) => c.name === 'voice');
+                    const voiceLimitAction = voiceCommand ? `</voice limit:${voiceCommand.id}>` : '`/voice limit`';
+
                     // Send a welcome message in the new channel (text chat)
                     await newChannel.send({
-                        content: `Welcome ${member.toString()}! This is your temporary voice channel. You can manage it using the permissions I've given you.`
+                        content: stripIndents`Welcome ${member.toString()}!
+                        ## Commands
+                        - ${voiceLimitAction} - set group size`
                     });
                 } catch (error) {
                     this.container.logger.error('Error creating temporary channel:', error);
