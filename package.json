@@ -1,6 +1,7 @@
 {
   "name": "farm-daddy",
   "version": "1.0.0",
+  "packageManager": "pnpm@10.25.0",
   "main": "dist/index.js",
   "author": "Bloodpoint Farming",
   "license": "MIT",
@@ -34,8 +35,6 @@
     "typescript": "~5.4.5"
   },
   "scripts": {
-    "sapphire": "sapphire",
-    "generate": "sapphire generate",
     "build": "tsc",
     "watch": "tsc -w",
     "start": "node --env-file=.env --env-file-if-exists=.env.local dist/index.js",
@@ -49,8 +48,18 @@
   "prettier": "@sapphire/prettier-config",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "esbuild"
+      "better-sqlite3"
     ]
+  },
+  "engines": {
+    "engines": {
+      "node": ">=24",
+      "pnpm": ">=10.21.0",
+      "runtime": {
+        "name": "node",
+        "version": "^24.11.0",
+        "onFail": "download"
+      }
+    }
   }
 }
