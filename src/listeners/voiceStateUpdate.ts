@@ -87,6 +87,7 @@ export class UserEvent extends Listener {
                         name: channelName,
                         type: ChannelType.GuildVoice,
                         parent: parentCategory?.id,
+                        userLimit: result.defaultLimit,
                         permissionOverwrites: [
                             {
                                 id: member.id,
@@ -111,8 +112,18 @@ export class UserEvent extends Listener {
                     const groupLimitAction = groupCommand ? `</group limit:${groupCommand.id}>` : '`/group limit`';
                     const groupPlatformAction = groupCommand ? `</group platform:${groupCommand.id}>` : '`/group platform`';
 
-                    let welcomeContent = stripIndents`Welcome ${member.toString()}!
-                    # Commands
+                    let welcomeContent = "";
+
+                    // Prepend custom welcome message if exists
+                    if (result.welcomeMessage) {
+                        welcomeContent += result.welcomeMessage.replace('{OWNER_MENTION}', member.toString());
+                    } else {
+                        welcomeContent += `Welcome ${member.toString()}!`;
+                    }
+
+                    welcomeContent += "\n";
+
+                    welcomeContent += stripIndents`# Commands
                     - ${groupLimitAction} - set VC user limit
                     - ${groupPlatformAction} - set platform`;
 
