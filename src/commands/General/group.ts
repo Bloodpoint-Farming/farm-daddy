@@ -98,7 +98,7 @@ export class UserCommand extends Subcommand {
     }
 
     private async sendAttentionEmbed(interaction: Subcommand.ChatInputCommandInteraction) {
-        const creators = await db.select().from(creatorChannels).all();
+        const creators = await db.select().from(creatorChannels).where(eq(creatorChannels.guildId, BigInt(interaction.guildId!))).all();
         const mentions = creators.map((c) => `<#${c.id}>`).join(', ');
 
         const embed = new EmbedBuilder()
