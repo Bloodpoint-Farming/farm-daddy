@@ -64,7 +64,7 @@ export class UserCommand extends Subcommand {
                                 .addStringOption((option) =>
                                     option
                                         .setName('template')
-                                        .setDescription('Default name template (use {user} for username)')
+                                        .setDescription('Channel name. Available placeholders: {USER}, {PLATFORM}, {BUILD}. Defaults supported, e.g. {USER:-Your} {BUILD:-Farming}.')
                                         .setRequired(false)
                                 )
                                 .addIntegerOption((option) =>
@@ -134,7 +134,7 @@ export class UserCommand extends Subcommand {
 
     public async chatInputCreator(interaction: Subcommand.ChatInputCommandInteraction) {
         const channel = interaction.options.getChannel('channel', true);
-        const template = interaction.options.getString('template') || "{user}'s Channel";
+        const template = interaction.options.getString('template') || "{USER}'s Channel";
 
         if (channel.type !== ChannelType.GuildVoice) {
             return interaction.reply({ content: 'Please select a valid voice channel.', ephemeral: true });

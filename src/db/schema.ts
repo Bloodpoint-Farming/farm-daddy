@@ -1,4 +1,4 @@
-import { sqliteTable, text, customType } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, customType, primaryKey } from 'drizzle-orm/sqlite-core';
 
 // Custom type to handle BigInts with defaultSafeIntegers: true
 // This is effectively a pass-through at runtime, but ensures TypeScript knows it's a bigint.
@@ -34,7 +34,7 @@ export const creatorChannels = sqliteTable('creator_channels', {
 	// The ID of the guild this channel belongs to
 	guildId: snowflake('guild_id').notNull(),
 	// The default name template for created temporary channels
-	defaultName: text('default_name').notNull().default("{user}'s Channel"),
+	defaultName: text('default_name').notNull().default("{USER}'s Channel"),
 	// Default user limit for created channels (0 = unlimited). Default to 5.
 	defaultLimit: customInt('default_limit').notNull().default(5),
 	// Custom welcome message for this creator channel
@@ -50,6 +50,8 @@ export const tempChannels = sqliteTable('temp_channels', {
 	createdAt: text('created_at').notNull(),
 	// The platform associated with this channel (e.g. 'steam', 'xbox')
 	platform: text('platform'),
+	// The build associated with this channel
+	build: text('build'),
 	// The ID of the creator channel that spawned this temp channel
 	creatorChannelId: snowflake('creator_channel_id')
 });
@@ -62,3 +64,18 @@ export const platformRoles = sqliteTable('platform_roles', {
 	// The platform key (e.g. 'steam', 'xbox')
 	platform: text('platform').notNull()
 });
+
+export const users = sqliteTable('users', {
+	// The User ID
+	userId: snowflake('user_id').notNull(),
+	// The Guild ID
+	guildId: snowflake('guild_id').notNull(),
+	// Last selected platform
+	lastPlatform: text('last_platform'),
+	// Last selected limit
+	lastLimit: customInt('last_limit'),
+	// Last selected build
+	lastBuild: text('last_build')
+}, (table) => ({
+	pk: primaryKey({ columns: [table.userId, table.guildId] })
+}));

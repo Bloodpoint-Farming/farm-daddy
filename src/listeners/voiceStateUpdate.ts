@@ -2,8 +2,8 @@ import { ApplyOptions } from '@sapphire/decorators';
 import { Listener } from '@sapphire/framework';
 import { ChannelType, PermissionFlagsBits, type VoiceState } from 'discord.js';
 import { db } from '../db';
-import { creatorChannels, tempChannels, platformRoles } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { creatorChannels, tempChannels, platformRoles, users } from '../db/schema';
+import { eq, and } from 'drizzle-orm';
 import { stripIndents } from 'common-tags';
 import type { PlatformKey } from '../lib/platforms';
 import { formatChannelName } from '../lib/channelName';
@@ -59,22 +59,34 @@ export class UserEvent extends Listener {
 
                     const parentCategory = newState.channel?.parent;
 
-                    // Infer platform from user roles
-                    let platformKey: PlatformKey | null = null;
-                    const userRoles = member.roles.cache.map((r) => BigInt(r.id));
-                    const matchingRoles = await db
+                    // Get user's last settings
+                    const userSettings = await db
                         .select()
-                        .from(platformRoles)
-                        .where(eq(platformRoles.guildId, BigInt(newState.guild.id)))
-                        .all();
+                        .from(users)
+                        .where(and(eq(users.userId, BigInt(member.id)), eq(users.guildId, BigInt(newState.guild.id))))
+                        .get();
 
-                    const matches = matchingRoles.filter((pr) => userRoles.includes(pr.roleId));
-                    if (matches.length === 1) {
-                        platformKey = matches[0].platform as PlatformKey;
+                    // Infer platform from user roles if not set in preferences
+                    let platformKey: PlatformKey | null = userSettings?.lastPlatform as PlatformKey || null;
+                    if (!platformKey) {
+                        const userRoles = member.roles.cache.map((r) => BigInt(r.id));
+                        const matchingRoles = await db
+                            .select()
+                            .from(platformRoles)
+                            .where(eq(platformRoles.guildId, BigInt(newState.guild.id)))
+                            .all();
+
+                        const matches = matchingRoles.filter((pr) => userRoles.includes(pr.roleId));
+                        if (matches.length === 1) {
+                            platformKey = matches[0].platform as PlatformKey;
+                        }
                     }
 
+                    const build = userSettings?.lastBuild || null;
+                    const limit = userSettings?.lastLimit || result.defaultLimit;
+
                     // Format channel name using helper
-                    const channelName = formatChannelName(result.defaultName, member, platformKey);
+                    const channelName = formatChannelName(result.defaultName, member, platformKey, build);
 
                     // Copy parent category permissions if available
                     const basePermissions = parentCategory?.permissionOverwrites.cache.map((overwrite) => ({
@@ -97,7 +109,7 @@ export class UserEvent extends Listener {
                         name: channelName,
                         type: ChannelType.GuildVoice,
                         parent: parentCategory?.id,
-                        userLimit: result.defaultLimit,
+                        userLimit: limit,
                         permissionOverwrites
                     });
 
@@ -110,6 +122,7 @@ export class UserEvent extends Listener {
                         guildId: BigInt(newState.guild.id),
                         createdAt: new Date().toISOString(),
                         platform: platformKey,
+                        build,
                         creatorChannelId: result.id
                     });
 
@@ -117,6 +130,7 @@ export class UserEvent extends Listener {
                     const groupCommand = this.container.client.application?.commands.cache.find((c) => c.name === 'group');
                     const groupLimitAction = groupCommand ? `</group limit:${groupCommand.id}>` : '`/group limit`';
                     const groupPlatformAction = groupCommand ? `</group platform:${groupCommand.id}>` : '`/group platform`';
+                    const groupBuildAction = groupCommand ? `</group build:${groupCommand.id}>` : '`/group build`';
 
                     let welcomeContent = "";
 
@@ -131,7 +145,8 @@ export class UserEvent extends Listener {
 
                     welcomeContent += stripIndents`# Commands
                     - ${groupLimitAction} - set VC user limit
-                    - ${groupPlatformAction} - set platform`;
+                    - ${groupPlatformAction} - set platform
+                    - ${groupBuildAction} - set build`;
 
                     // Send a welcome message in the new channel (text chat)
                     await newChannel.send({
