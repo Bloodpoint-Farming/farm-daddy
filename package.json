@@ -41,8 +41,7 @@
     "dev": "npm run build && npm run start",
     "watch:start": "tsc-watch --onSuccess \"npm run start\"",
     "format": "prettier --write \"src/\"",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
     "test": "npx tsx --test tests/**/*.test.ts"
   },
   "prettier": "@sapphire/prettier-config",
