@@ -75,17 +75,30 @@ export class UserEvent extends Listener {
 
                     // Format channel name using helper
                     const channelName = formatChannelName(result.defaultName, member, platformKey);
+
+                    // Copy parent category permissions if available
+                    const basePermissions = parentCategory?.permissionOverwrites.cache.map((overwrite) => ({
+                        id: overwrite.id,
+                        allow: overwrite.allow.bitfield,
+                        deny: overwrite.deny.bitfield,
+                        type: overwrite.type
+                    })) ?? [];
+
+                    // Add member-specific permissions on top
+                    const permissionOverwrites = [
+                        ...basePermissions,
+                        {
+                            id: member.id,
+                            allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers]
+                        }
+                    ];
+
                     const newChannel = await newState.guild.channels.create({
                         name: channelName,
                         type: ChannelType.GuildVoice,
                         parent: parentCategory?.id,
                         userLimit: result.defaultLimit,
-                        permissionOverwrites: [
-                            {
-                                id: member.id,
-                                allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers]
-                            }
-                        ]
+                        permissionOverwrites
                     });
 
                     // Move the member to the new channel
