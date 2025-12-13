@@ -52,7 +52,7 @@ export class UserCommand extends Subcommand {
                         .addStringOption((option) =>
                             option
                                 .setName('platform')
-                                .setDescription('The gaming platform')
+                                .setDescription('All farmers must be on the same platform to match together.')
                                 .setRequired(true)
                                 .addChoices(
                                     ...Object.entries(PLATFORMS).map(([key, value]) => ({
@@ -69,7 +69,7 @@ export class UserCommand extends Subcommand {
                         .addStringOption((option) =>
                             option
                                 .setName('build')
-                                .setDescription('The build name (e.g. Farming, PvP)')
+                                .setDescription('The #farming-builds name (e.g. BBDC, R4DC, R4K, etc.)')
                                 .setRequired(true)
                         )
                 )
@@ -98,6 +98,7 @@ export class UserCommand extends Subcommand {
         }
 
         try {
+            const oldLimit = channel.userLimit
             await channel.setUserLimit(limit);
 
             // Update user preferences
@@ -114,9 +115,7 @@ export class UserCommand extends Subcommand {
                 });
 
             const embed = new EmbedBuilder()
-                .setTitle('Updated!')
-                .setDescription(`Group limit is now ${limit}.`)
-                .setColor(Colors.Green);
+                .setDescription(`### Limit ${limit}\n-# Limit changed from **${oldLimit}** to **${limit}**.`)
 
             return interaction.reply({ embeds: [embed] });
         } catch (error) {
@@ -205,9 +204,7 @@ export class UserCommand extends Subcommand {
             await channel.setName(newName);
 
             const embed = new EmbedBuilder()
-                .setTitle('Platform Updated!')
-                .setDescription(`Platform set to **${PLATFORMS[platformKey].label}**.`)
-                .setColor(Colors.Green);
+                .setDescription(`Platform set to **${PLATFORMS[platformKey].label}**.`);
 
             return interaction.reply({ embeds: [embed] });
         } catch (error) {
@@ -284,9 +281,7 @@ export class UserCommand extends Subcommand {
             await channel.setName(newName);
 
             const embed = new EmbedBuilder()
-                .setTitle('Build Updated!')
-                .setDescription(`Build set to **${build}**.`)
-                .setColor(Colors.Green);
+                .setDescription(`Build set to **${build}**.`);
 
             return interaction.reply({ embeds: [embed] });
         } catch (error) {
