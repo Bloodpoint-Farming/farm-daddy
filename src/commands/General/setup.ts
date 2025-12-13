@@ -64,7 +64,7 @@ export class UserCommand extends Subcommand {
                                 .addStringOption((option) =>
                                     option
                                         .setName('template')
-                                        .setDescription('Channel name. Available placeholders: {USER}, {PLATFORM}, {BUILD}. Defaults supported, e.g. {USER:-Your} {BUILD:-Farming}.')
+                                        .setDescription('Channel name. Available placeholders: {USER}, {PLATFORM}, {BUILD}. Defaults: {BUILD:-Farming}')
                                         .setRequired(false)
                                 )
                                 .addIntegerOption((option) =>
