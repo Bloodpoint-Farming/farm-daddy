@@ -201,7 +201,9 @@ export class UserCommand extends Subcommand {
             // Regenerate channel name from template
             const member = interaction.member as import('discord.js').GuildMember;
             const newName = formatChannelName(creatorChannel.defaultName, member, platformKey, tempChannel.build);
+            this.container.logger.debug(`Renaming channel ${channel.id} to ${newName}`);
             await channel.setName(newName);
+            this.container.logger.debug(`Renamed channel ${channel.id}`);
 
             const embed = new EmbedBuilder()
                 .setDescription(`Platform set to **${PLATFORMS[platformKey].label}**.`);
@@ -278,7 +280,12 @@ export class UserCommand extends Subcommand {
             // Regenerate channel name from template
             const member = interaction.member as import('discord.js').GuildMember;
             const newName = formatChannelName(creatorChannel.defaultName, member, tempChannel.platform as PlatformKey, build);
-            await channel.setName(newName);
+            this.container.logger.debug(`Renaming channel ${channel.id} to ${newName}`);
+            await Promise.race([
+                channel.setName(newName),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Channel rename timed out')), 5000))
+            ]);
+            this.container.logger.debug(`Renamed channel ${channel.id}`);
 
             const embed = new EmbedBuilder()
                 .setDescription(`Build set to **${build}**.`);
