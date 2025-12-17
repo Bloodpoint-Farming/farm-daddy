@@ -2,21 +2,6 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug (TSX)",
-            "type": "node",
-            "request": "launch",
-            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/tsx.cmd",
-            "args": [
-                "src/index.ts"
-            ],
-            "envFile": "${workspaceFolder}/.env.local",
-            "console": "integratedTerminal",
-            "restart": true,
-            "skipFiles": [
-                "<node_internals>/**"
-            ]
-        },
-        {
             "name": "Debug (Build)",
             "type": "node",
             "request": "launch",
