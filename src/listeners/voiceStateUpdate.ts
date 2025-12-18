@@ -132,11 +132,14 @@ export class UserEvent extends Listener {
                     await member.voice.setChannel(newChannel);
 
                     // Get valid command IDs for clickable links
+                    const settingsCommand = this.container.client.application?.commands.cache.find((c) => c.name === 'settings');
+                    const settingsAction = settingsCommand ? `</settings:${settingsCommand.id}>` : '`/settings`';
                     const groupCommand = this.container.client.application?.commands.cache.find((c) => c.name === 'group');
                     const groupLimitAction = groupCommand ? `</group limit:${groupCommand.id}>` : '`/group limit`';
                     const groupPlatformAction = groupCommand ? `</group platform:${groupCommand.id}>` : '`/group platform`';
                     const groupBuildAction = groupCommand ? `</group build:${groupCommand.id}>` : '`/group build`';
                     const groupTransferAction = groupCommand ? `</group transfer:${groupCommand.id}>` : '`/group transfer`';
+                    const groupClaimAction = groupCommand ? `</group claim:${groupCommand.id}>` : '`/group claim`';
 
                     let welcomeContent = "";
 
@@ -149,11 +152,17 @@ export class UserEvent extends Listener {
 
                     welcomeContent += "\n";
 
-                    welcomeContent += stripIndents`# Commands
-                    - ${groupLimitAction} - set VC user limit
-                    - ${groupPlatformAction} - set platform
-                    - ${groupBuildAction} - set build
-                    - ${groupTransferAction} - transfer ownership`;
+                    welcomeContent += stripIndents`
+                    ## Settings ⚙️
+                    - ${settingsAction} - block & trust users. control chat and command access.
+                    ## Ownership 👑
+                    - ${groupTransferAction} - pass channel ownership
+                    - ${groupClaimAction} - pick up the torch
+                    ## Channel 🧑‍🌾
+                    - ${groupLimitAction} - set channel size
+                    - ${groupPlatformAction} - set the platform you're matching on
+                    - ${groupBuildAction} - set your farming method
+                    `;
 
                     // Send a welcome message in the new channel (text chat)
                     await newChannel.send({
