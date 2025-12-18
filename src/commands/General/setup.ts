@@ -50,6 +50,7 @@ export class UserCommand extends Subcommand {
             builder
                 .setName(this.name)
                 .setDescription(this.description)
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
                 .addSubcommandGroup((group) =>
                     group
                         .setName('creator')
