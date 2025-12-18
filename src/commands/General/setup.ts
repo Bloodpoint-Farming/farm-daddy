@@ -6,6 +6,7 @@ import { db } from '../../db';
 import { creatorChannels, platformRoles, guildStaffRoles } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { PLATFORMS, type PlatformKey } from '../../lib/platforms';
+import { stripIndent } from 'common-tags';
 
 @ApplyOptions<Subcommand.Options>({
     name: 'setup',
@@ -297,7 +298,12 @@ export class UserCommand extends Subcommand {
             return interaction.reply({ content: 'No Creator Channels configured (all previous ones were missing and have been purged).', ephemeral: true });
         }
 
-        const list = validCreators.map((c) => `- <#${c.id}> (Template: \`${c.defaultName}\`, Limit: ${c.defaultLimit})`).join('\n');
+        const list = validCreators.map((c) =>
+            stripIndent`
+            - <#${c.id}>
+              - \`🔉\` \`${c.defaultName}\`  \`*/${c.defaultLimit}\`
+            `
+        ).join('\n\n');
         return interaction.reply({ content: `**Creator Channels:**\n${list}`, ephemeral: true });
     }
 
