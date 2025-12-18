@@ -86,11 +86,11 @@ export class UserCommand extends Subcommand {
                             command
                                 .setName('message')
                                 .setDescription('Configure welcome message for a creator channel')
-                                .addChannelOption((option) =>
+                                .addStringOption((option) =>
                                     option
                                         .setName('channel')
                                         .setDescription('The creator channel to configure')
-                                        .addChannelTypes(ChannelType.GuildVoice)
+                                        .setAutocomplete(true)
                                         .setRequired(true)
                                 )
                         )
@@ -103,11 +103,11 @@ export class UserCommand extends Subcommand {
                             command
                                 .setName('remove')
                                 .setDescription('Un-track a creator channel')
-                                .addChannelOption((option) =>
+                                .addStringOption((option) =>
                                     option
                                         .setName('channel')
                                         .setDescription('The creator channel to remove')
-                                        .addChannelTypes(ChannelType.GuildVoice)
+                                        .setAutocomplete(true)
                                         .setRequired(true)
                                 )
                         )
@@ -141,6 +141,33 @@ export class UserCommand extends Subcommand {
                         .setDescription('Designate staff roles that are exempt from blocks')
                 )
         );
+    }
+
+    public override async autocompleteRun(interaction: Subcommand.AutocompleteInteraction) {
+        const focusedOption = interaction.options.getFocused(true);
+        if (focusedOption.name !== 'channel') return interaction.respond([]);
+
+        const guildId = interaction.guildId;
+        if (!guildId) return interaction.respond([]);
+
+        const creators = await db
+            .select()
+            .from(creatorChannels)
+            .where(eq(creatorChannels.guildId, BigInt(guildId)))
+            .all();
+
+        const results = creators
+            .map((c) => {
+                const channel = interaction.guild?.channels.cache.get(c.id.toString());
+                return {
+                    name: channel ? `#${channel.name}` : `Unknown Channel (${c.id})`,
+                    value: c.id.toString()
+                };
+            })
+            .filter((c) => c.name.toLowerCase().includes(focusedOption.value.toLowerCase()))
+            .slice(0, 25);
+
+        return interaction.respond(results);
     }
 
     public async chatInputCreator(interaction: Subcommand.ChatInputCommandInteraction) {
@@ -209,18 +236,18 @@ export class UserCommand extends Subcommand {
     }
 
     public async chatInputMessage(interaction: Subcommand.ChatInputCommandInteraction) {
-        const channel = interaction.options.getChannel('channel', true);
+        const channelId = interaction.options.getString('channel', true);
 
         // Verify it is a creator channel
-        const data = await db.select().from(creatorChannels).where(eq(creatorChannels.id, BigInt(channel.id))).get();
+        const data = await db.select().from(creatorChannels).where(eq(creatorChannels.id, BigInt(channelId))).get();
 
         if (!data) {
-            return interaction.reply({ content: 'That channel is not a configured Creator Channel.', ephemeral: true });
+            return interaction.reply({ content: 'That channel is no longer a configured Creator Channel.', ephemeral: true });
         }
 
         // Show Modal
         const modal = new ModalBuilder()
-            .setCustomId(`setup-message-${channel.id}`)
+            .setCustomId(`setup-message-${channelId}`)
             .setTitle('Edit Welcome Message');
 
         const messageInput = new TextInputBuilder()
@@ -239,7 +266,7 @@ export class UserCommand extends Subcommand {
         // Handle Submission
         try {
             const submission = await interaction.awaitModalSubmit({
-                filter: (i) => i.customId === `setup-message-${channel.id}`,
+                filter: (i) => i.customId === `setup-message-${channelId}`,
                 time: 300_000 // 5 minutes
             });
 
@@ -248,10 +275,10 @@ export class UserCommand extends Subcommand {
             await db
                 .update(creatorChannels)
                 .set({ welcomeMessage: newMessage || null })
-                .where(eq(creatorChannels.id, BigInt(channel.id)));
+                .where(eq(creatorChannels.id, BigInt(channelId)));
 
             await submission.reply({
-                content: `Welcome message for <#${channel.id}> has been ${newMessage ? 'updated' : 'cleared'}.`,
+                content: `Welcome message for <#${channelId}> has been ${newMessage ? 'updated' : 'cleared'}.`,
                 ephemeral: true
             });
 
@@ -308,15 +335,15 @@ export class UserCommand extends Subcommand {
     }
 
     public async chatInputRemove(interaction: Subcommand.ChatInputCommandInteraction) {
-        const channel = interaction.options.getChannel('channel', true);
+        const channelId = interaction.options.getString('channel', true);
 
-        const result = await db.delete(creatorChannels).where(eq(creatorChannels.id, BigInt(channel.id))).returning();
+        const result = await db.delete(creatorChannels).where(eq(creatorChannels.id, BigInt(channelId))).returning();
 
         if (result.length === 0) {
             return interaction.reply({ content: 'That channel was not a configured Creator Channel.', ephemeral: true });
         }
 
-        return interaction.reply({ content: `Successfully removed <#${channel.id}> from Creator Channels.`, ephemeral: true });
+        return interaction.reply({ content: `Successfully removed <#${channelId}> from Creator Channels.`, ephemeral: true });
     }
 
     public async chatInputStaff(interaction: Subcommand.ChatInputCommandInteraction) {
