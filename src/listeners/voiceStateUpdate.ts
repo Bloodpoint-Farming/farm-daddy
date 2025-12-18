@@ -1,12 +1,13 @@
 import { ApplyOptions } from '@sapphire/decorators';
 import { Listener } from '@sapphire/framework';
-import { ChannelType, PermissionFlagsBits, type VoiceState } from 'discord.js';
+import { ChannelType, PermissionFlagsBits, type VoiceState, type VoiceChannel } from 'discord.js';
 import { db } from '../db';
 import { creatorChannels, tempChannels, platformRoles, users } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { stripIndents } from 'common-tags';
 import type { PlatformKey } from '../lib/platforms';
 import { formatChannelName } from '../lib/channelName';
+import { updateChannelPermissions } from '../lib/permissions';
 
 @ApplyOptions<Listener.Options>({
     event: 'voiceStateUpdate'
@@ -113,18 +114,22 @@ export class UserEvent extends Listener {
                         permissionOverwrites
                     });
 
-                    // Move the member to the new channel
-                    await member.voice.setChannel(newChannel);
-
-                    // Track in DB
+                    // Track in DB FIRST so updateChannelPermissions can find it
                     await db.insert(tempChannels).values({
                         id: BigInt(newChannel.id),
                         guildId: BigInt(newState.guild.id),
+                        ownerId: BigInt(member.id),
                         createdAt: new Date().toISOString(),
                         platform: platformKey,
                         build,
                         creatorChannelId: result.id
                     });
+
+                    // Update permissions using helper (handles owner settings, staff roles, and dynamic chat)
+                    await updateChannelPermissions(newChannel);
+
+                    // Move the member to the new channel
+                    await member.voice.setChannel(newChannel);
 
                     // Get valid command IDs for clickable links
                     const groupCommand = this.container.client.application?.commands.cache.find((c) => c.name === 'group');
@@ -155,6 +160,19 @@ export class UserEvent extends Listener {
                     });
                 } catch (error) {
                     this.container.logger.error('Error creating temporary channel:', error);
+                }
+            }
+        }
+
+        // Handle dynamic permission updates for any temporary channel joined/left
+        const channelId = newState.channelId || oldState.channelId;
+        if (channelId) {
+            const channel = newState.guild.channels.cache.get(channelId);
+            if (channel?.type === ChannelType.GuildVoice) {
+                // We only care if it's a tracked temp channel
+                const isTemp = await db.select().from(tempChannels).where(eq(tempChannels.id, BigInt(channelId))).get();
+                if (isTemp) {
+                    await updateChannelPermissions(channel as VoiceChannel);
                 }
             }
         }

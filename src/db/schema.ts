@@ -52,6 +52,8 @@ export const tempChannels = sqliteTable('temp_channels', {
 	platform: text('platform'),
 	// The build associated with this channel
 	build: text('build'),
+	// The ID of the owner (user who created the channel)
+	ownerId: snowflake('owner_id').notNull(),
 	// The ID of the creator channel that spawned this temp channel
 	creatorChannelId: snowflake('creator_channel_id')
 });
@@ -75,7 +77,44 @@ export const users = sqliteTable('users', {
 	// Last selected limit
 	lastLimit: customInt('last_limit'),
 	// Last selected build
-	lastBuild: text('last_build')
+	lastBuild: text('last_build'),
+	// Chat restriction setting
+	chatRestriction: text('chat_restriction').notNull().default('always')
 }, (table) => ({
 	pk: primaryKey({ columns: [table.userId, table.guildId] })
+}));
+
+export const userTrust = sqliteTable('user_trust', {
+	// The User ID who is trusting someone
+	userId: snowflake('user_id').notNull(),
+	// The Guild ID
+	guildId: snowflake('guild_id').notNull(),
+	// The ID of the user being trusted
+	trustedUserId: snowflake('trusted_user_id').notNull(),
+	// Timestamp when added
+	createdAt: text('created_at').notNull()
+}, (table) => ({
+	pk: primaryKey({ columns: [table.userId, table.guildId, table.trustedUserId] })
+}));
+
+export const userBlock = sqliteTable('user_block', {
+	// The User ID who is blocking someone
+	userId: snowflake('user_id').notNull(),
+	// The Guild ID
+	guildId: snowflake('guild_id').notNull(),
+	// The ID of the user being blocked
+	blockedUserId: snowflake('blocked_user_id').notNull(),
+	// Timestamp when added
+	createdAt: text('created_at').notNull()
+}, (table) => ({
+	pk: primaryKey({ columns: [table.userId, table.guildId, table.blockedUserId] })
+}));
+
+export const guildStaffRoles = sqliteTable('guild_staff_roles', {
+	// The Guild ID
+	guildId: snowflake('guild_id').notNull(),
+	// The Role ID
+	roleId: snowflake('role_id').notNull()
+}, (table) => ({
+	pk: primaryKey({ columns: [table.guildId, table.roleId] })
 }));

@@ -7,6 +7,7 @@ import { creatorChannels, tempChannels, users } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { PLATFORMS, type PlatformKey } from '../../lib/platforms';
 import { formatChannelName } from '../../lib/channelName';
+import { updateChannelPermissions } from '../../lib/permissions';
 
 @ApplyOptions<Subcommand.Options>({
     name: 'group',
@@ -100,6 +101,9 @@ export class UserCommand extends Subcommand {
         try {
             const oldLimit = channel.userLimit
             await channel.setUserLimit(limit);
+
+            // Update permissions in case "spots open" status changed
+            await updateChannelPermissions(channel as import('discord.js').VoiceChannel);
 
             // Update user preferences
             await db

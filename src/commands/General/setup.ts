@@ -1,9 +1,9 @@
 import { Subcommand } from '@sapphire/plugin-subcommands';
 import { ApplyOptions } from '@sapphire/decorators';
 import { ApplicationCommandRegistry } from '@sapphire/framework';
-import { ActionRowBuilder, ChannelType, ModalBuilder, PermissionFlagsBits, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { ActionRowBuilder, ChannelType, ModalBuilder, PermissionFlagsBits, TextInputBuilder, TextInputStyle, RoleSelectMenuBuilder, ComponentType } from 'discord.js';
 import { db } from '../../db';
-import { creatorChannels, platformRoles } from '../../db/schema';
+import { creatorChannels, platformRoles, guildStaffRoles } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { PLATFORMS, type PlatformKey } from '../../lib/platforms';
 
@@ -37,6 +37,10 @@ import { PLATFORMS, type PlatformKey } from '../../lib/platforms';
         {
             name: 'platform',
             chatInputRun: 'chatInputPlatform'
+        },
+        {
+            name: 'staff',
+            chatInputRun: 'chatInputStaff'
         }
     ]
 })
@@ -128,6 +132,11 @@ export class UserCommand extends Subcommand {
                                 .setDescription('The role to associate with this platform')
                                 .setRequired(true)
                         )
+                )
+                .addSubcommand((command) =>
+                    command
+                        .setName('staff')
+                        .setDescription('Designate staff roles that are exempt from blocks')
                 )
         );
     }
@@ -274,6 +283,62 @@ export class UserCommand extends Subcommand {
         }
 
         return interaction.reply({ content: `Successfully removed <#${channel.id}> from Creator Channels.`, ephemeral: true });
+    }
+
+    public async chatInputStaff(interaction: Subcommand.ChatInputCommandInteraction) {
+        const { guildId } = interaction;
+        if (!guildId) return;
+
+        const staffRoles = await db
+            .select()
+            .from(guildStaffRoles)
+            .where(eq(guildStaffRoles.guildId, BigInt(guildId)))
+            .all();
+
+        const roleIds = staffRoles.map((r) => r.roleId.toString());
+
+        const select = new RoleSelectMenuBuilder()
+            .setCustomId('setup-staff-roles')
+            .setPlaceholder('Select staff roles')
+            .setMinValues(0)
+            .setMaxValues(25)
+            .setDefaultRoles(roleIds.slice(0, 25));
+
+        const row = new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(select);
+
+        const response = await interaction.reply({
+            content: 'Select the roles that should be exempt from being blocked in temporary channels.',
+            components: [row],
+            ephemeral: true
+        });
+
+        const collector = response.createMessageComponentCollector({
+            componentType: ComponentType.RoleSelect,
+            time: 60_000
+        });
+
+        collector.on('collect', async (i) => {
+            if (i.customId !== 'setup-staff-roles') return;
+
+            const selectedRoles = i.values;
+
+            // Update DB: Delete all and re-insert
+            await db.delete(guildStaffRoles).where(eq(guildStaffRoles.guildId, BigInt(guildId)));
+
+            if (selectedRoles.length > 0) {
+                await db.insert(guildStaffRoles).values(
+                    selectedRoles.map((id) => ({
+                        guildId: BigInt(guildId),
+                        roleId: BigInt(id)
+                    }))
+                );
+            }
+
+            await i.update({
+                content: `Successfully updated staff roles. ${selectedRoles.length} roles designated.`,
+                components: []
+            });
+        });
     }
 }
 
