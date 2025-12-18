@@ -76,13 +76,14 @@ export async function updateChannelPermissions(channel: VoiceChannel) {
         }
     }
 
-    // 6. Blocked Users (Staff exempt)
-    // Blocks take priority over trust/membership, so we process them later.
+    // 6. Blocked Users (Staff & VC Members exempt)
+    // Blocks take priority over trust, so we process them later.
     for (const bId of blockedIds) {
         const member = guild.members.cache.get(bId);
         const isStaff = member?.roles.cache.some((r) => staffRoleIds.has(r.id));
+        const isInVC = channel.members.has(bId)
 
-        if (!isStaff) {
+        if (!isStaff && !isInVC) {
             addOverwrite(
                 bId,
                 OverwriteType.Member,
