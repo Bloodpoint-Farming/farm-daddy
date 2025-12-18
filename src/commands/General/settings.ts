@@ -73,7 +73,7 @@ export class UserCommand extends Command {
             ${cmdLabel}
 
             ## Trust List
-            ${trusted.length} trusted users can update your VC.
+            ${trusted.length} trusted users can always chat and join your VC even when full.
 
             ## Block List
             ${blocked.length} blocked users cannot join or chat.
@@ -169,7 +169,7 @@ export class UserCommand extends Command {
         );
 
         await interaction.update({
-            content: 'Select the users you want to trust. Trusted users can always chat in your channels.',
+            content: 'Select the users you want to trust. Trusted users can always chat and join your VC even when full.',
             embeds: [],
             components: [row, backBtn]
         });

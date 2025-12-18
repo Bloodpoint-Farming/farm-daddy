@@ -63,20 +63,30 @@ export async function updateChannelPermissions(channel: VoiceChannel) {
         restrictChat ? PermissionFlagsBits.SendMessages : 0n
     );
 
-    // 5. Chat Exceptions (Trusted & Active Members)
+    // 5. Trusted User Permissions
+    // Trusted users always get Move Members, plus chat access if the channel is full.
+    for (const tId of trustedIds) {
+        addOverwrite(
+            tId,
+            OverwriteType.Member,
+            PermissionFlagsBits.MoveMembers | PermissionFlagsBits.SendMessages
+        );
+    }
+
+    // 6. Active Member Exceptions
     // These only need explicit member-level overwrites if @everyone is restricted.
     if (restrictChat) {
-        // Trusted Users
-        for (const tId of trustedIds) {
-            addOverwrite(tId, OverwriteType.Member, PermissionFlagsBits.SendMessages);
-        }
         // Members currently in the VC (Don't auto-mute people when the channel fills up)
         for (const mId of channel.members.keys()) {
-            addOverwrite(mId, OverwriteType.Member, PermissionFlagsBits.SendMessages);
+            // If they are trusted, they already got SendMessages above. 
+            // If not, we grant it here so they aren't cut off.
+            if (!trustedIds.has(mId)) {
+                addOverwrite(mId, OverwriteType.Member, PermissionFlagsBits.SendMessages);
+            }
         }
     }
 
-    // 6. Blocked Users (Staff & VC Members exempt)
+    // 7. Blocked Users (Staff & VC Members exempt)
     // Blocks take priority over trust, so we process them later.
     for (const bId of blockedIds) {
         const member = guild.members.cache.get(bId);
@@ -93,7 +103,7 @@ export async function updateChannelPermissions(channel: VoiceChannel) {
         }
     }
 
-    // 7. Owner (Management Access)
+    // 8. Owner (Management Access)
     // Owner always gets SendMessages and management, regardless of restriction.
     addOverwrite(
         ownerId.toString(),
