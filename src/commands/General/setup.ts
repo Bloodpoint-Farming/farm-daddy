@@ -264,13 +264,40 @@ export class UserCommand extends Subcommand {
     }
 
     public async chatInputList(interaction: Subcommand.ChatInputCommandInteraction) {
-        const creators = await db.select().from(creatorChannels).where(eq(creatorChannels.guildId, BigInt(interaction.guildId!))).all();
+        const guild = interaction.guild;
+        if (!guild) return;
+
+        const creators = await db.select().from(creatorChannels).where(eq(creatorChannels.guildId, BigInt(guild.id))).all();
 
         if (creators.length === 0) {
             return interaction.reply({ content: 'No Creator Channels configured.', ephemeral: true });
         }
 
-        const list = creators.map((c) => `- <#${c.id}> (Template: \`${c.defaultName}\`, Limit: ${c.defaultLimit})`).join('\n');
+        const validCreators = [];
+        const toDelete = [];
+
+        for (const creator of creators) {
+            const channel = guild.channels.cache.get(creator.id.toString());
+            if (channel) {
+                validCreators.push(creator);
+            } else {
+                toDelete.push(creator.id);
+            }
+        }
+
+        // Clean up ghost channels
+        if (toDelete.length > 0) {
+            for (const id of toDelete) {
+                await db.delete(creatorChannels).where(eq(creatorChannels.id, id));
+            }
+            this.container.logger.info(`[Setup] Purged ${toDelete.length} ghost creator channels from DB.`);
+        }
+
+        if (validCreators.length === 0) {
+            return interaction.reply({ content: 'No Creator Channels configured (all previous ones were missing and have been purged).', ephemeral: true });
+        }
+
+        const list = validCreators.map((c) => `- <#${c.id}> (Template: \`${c.defaultName}\`, Limit: ${c.defaultLimit})`).join('\n');
         return interaction.reply({ content: `**Creator Channels:**\n${list}`, ephemeral: true });
     }
 
