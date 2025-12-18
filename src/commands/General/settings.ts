@@ -198,7 +198,7 @@ export class UserCommand extends Command {
         );
 
         await interaction.update({
-            content: 'Select the users you want to block. Blocked users cannot join your channels.',
+            content: 'Select the users you want to block. Blocked users cannot join your channels or send messages.',
             embeds: [],
             components: [row, backBtn]
         });
@@ -298,12 +298,14 @@ export class UserCommand extends Command {
         const { user, guildId, customId, values } = interaction;
         if (!guildId) return;
 
+        // Filter out self
+        const filteredValues = values.filter(id => id !== user.id);
         const now = new Date().toISOString();
 
         if (customId === 'settings-user-trust') {
             const current = await db.select().from(userTrust).where(and(eq(userTrust.userId, BigInt(user.id)), eq(userTrust.guildId, BigInt(guildId)))).all();
             const existingIds = new Set(current.map(t => t.trustedUserId.toString()));
-            const selectedSet = new Set(values);
+            const selectedSet = new Set(filteredValues);
 
             const toRemove = [...existingIds].filter(id => !selectedSet.has(id));
             const toAdd = [...selectedSet].filter(id => !existingIds.has(id));
@@ -312,13 +314,17 @@ export class UserCommand extends Command {
                 await db.delete(userTrust).where(and(eq(userTrust.userId, BigInt(user.id)), eq(userTrust.guildId, BigInt(guildId)), eq(userTrust.trustedUserId, BigInt(id))));
             }
             if (toAdd.length > 0) {
-                await db.insert(userTrust).values(toAdd.map(id => ({ userId: BigInt(user.id), guildId: BigInt(guildId), trustedUserId: BigInt(id), createdAt: now })));
+                for (const id of toAdd) {
+                    // Remove from block list if being added to trust list
+                    await db.delete(userBlock).where(and(eq(userBlock.userId, BigInt(user.id)), eq(userBlock.guildId, BigInt(guildId)), eq(userBlock.blockedUserId, BigInt(id))));
+                    await db.insert(userTrust).values({ userId: BigInt(user.id), guildId: BigInt(guildId), trustedUserId: BigInt(id), createdAt: now });
+                }
             }
             await this.finalizeUpdate(interaction, 'Trust List');
         } else if (customId === 'settings-user-block') {
             const current = await db.select().from(userBlock).where(and(eq(userBlock.userId, BigInt(user.id)), eq(userBlock.guildId, BigInt(guildId)))).all();
             const existingIds = new Set(current.map(b => b.blockedUserId.toString()));
-            const selectedSet = new Set(values);
+            const selectedSet = new Set(filteredValues);
 
             const toRemove = [...existingIds].filter(id => !selectedSet.has(id));
             const toAdd = [...selectedSet].filter(id => !existingIds.has(id));
@@ -327,7 +333,11 @@ export class UserCommand extends Command {
                 await db.delete(userBlock).where(and(eq(userBlock.userId, BigInt(user.id)), eq(userBlock.guildId, BigInt(guildId)), eq(userBlock.blockedUserId, BigInt(id))));
             }
             if (toAdd.length > 0) {
-                await db.insert(userBlock).values(toAdd.map(id => ({ userId: BigInt(user.id), guildId: BigInt(guildId), blockedUserId: BigInt(id), createdAt: now })));
+                for (const id of toAdd) {
+                    // Remove from trust list if being added to block list
+                    await db.delete(userTrust).where(and(eq(userTrust.userId, BigInt(user.id)), eq(userTrust.guildId, BigInt(guildId)), eq(userTrust.trustedUserId, BigInt(id))));
+                    await db.insert(userBlock).values({ userId: BigInt(user.id), guildId: BigInt(guildId), blockedUserId: BigInt(id), createdAt: now });
+                }
             }
             await this.finalizeUpdate(interaction, 'Block List');
         }
