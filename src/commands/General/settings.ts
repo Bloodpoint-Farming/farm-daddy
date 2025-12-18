@@ -1,138 +1,137 @@
-import { Subcommand } from '@sapphire/plugin-subcommands';
+import { Command, ApplicationCommandRegistry } from '@sapphire/framework';
 import { ApplyOptions } from '@sapphire/decorators';
-import { ApplicationCommandRegistry } from '@sapphire/framework';
 import {
     ActionRowBuilder,
     EmbedBuilder,
     UserSelectMenuBuilder,
     StringSelectMenuBuilder,
-    ComponentType,
-    Colors
+    Colors,
+    ButtonBuilder,
+    ButtonStyle,
+    MessageComponentInteraction,
+    UserSelectMenuInteraction,
+    StringSelectMenuInteraction
 } from 'discord.js';
 import { db } from '../../db';
 import { users, userTrust, userBlock, tempChannels } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { updateChannelPermissions } from '../../lib/permissions';
-import { VoiceChannel } from 'discord.js';
 import { stripIndent } from 'common-tags';
 
-@ApplyOptions<Subcommand.Options>({
+@ApplyOptions<Command.Options>({
     name: 'settings',
-    description: 'Manage your personal settings',
-    subcommands: [
-        {
-            name: 'view',
-            chatInputRun: 'chatInputView',
-            default: true
-        },
-        {
-            type: 'group',
-            name: 'user',
-            entries: [
-                {
-                    name: 'trust',
-                    chatInputRun: 'chatInputTrust'
-                },
-                {
-                    name: 'block',
-                    chatInputRun: 'chatInputBlock'
-                }
-            ]
-        },
-        {
-            name: 'chat',
-            chatInputRun: 'chatInputChat'
-        }
-    ]
+    description: 'Manage settings for your VCs'
 })
-export class UserCommand extends Subcommand {
+export class UserCommand extends Command {
     public override registerApplicationCommands(registry: ApplicationCommandRegistry) {
         registry.registerChatInputCommand((builder) =>
             builder
                 .setName(this.name)
                 .setDescription(this.description)
-                .addSubcommand((command) =>
-                    command
-                        .setName('view')
-                        .setDescription("View your current settings")
-                )
-                .addSubcommandGroup((group) =>
-                    group
-                        .setName('user')
-                        .setDescription('Manage your trust and block lists')
-                        .addSubcommand((command) =>
-                            command
-                                .setName('trust')
-                                .setDescription('Manage your trusted users')
-                        )
-                        .addSubcommand((command) =>
-                            command
-                                .setName('block')
-                                .setDescription('Manage your blocked users')
-                        )
-                )
-                .addSubcommand((command) =>
-                    command
-                        .setName('chat')
-                        .setDescription('Control who can chat in your channels')
-                )
         );
     }
 
-    public async chatInputView(interaction: Subcommand.ChatInputCommandInteraction) {
+    public override async chatInputRun(interaction: Command.ChatInputCommandInteraction) {
         const { user, guildId } = interaction;
         if (!guildId) return;
 
-        const userPref = await db
-            .select()
-            .from(users)
-            .where(and(eq(users.userId, BigInt(user.id)), eq(users.guildId, BigInt(guildId))))
-            .get();
+        const renderDashboard = async () => {
+            const userPref = await db
+                .select()
+                .from(users)
+                .where(and(eq(users.userId, BigInt(user.id)), eq(users.guildId, BigInt(guildId))))
+                .get();
 
-        const trusted = await db
-            .select()
-            .from(userTrust)
-            .where(and(eq(userTrust.userId, BigInt(user.id)), eq(userTrust.guildId, BigInt(guildId))))
-            .all();
+            const trusted = await db
+                .select()
+                .from(userTrust)
+                .where(and(eq(userTrust.userId, BigInt(user.id)), eq(userTrust.guildId, BigInt(guildId))))
+                .all();
 
-        const blocked = await db
-            .select()
-            .from(userBlock)
-            .where(and(eq(userBlock.userId, BigInt(user.id)), eq(userBlock.guildId, BigInt(guildId))))
-            .all();
+            const blocked = await db
+                .select()
+                .from(userBlock)
+                .where(and(eq(userBlock.userId, BigInt(user.id)), eq(userBlock.guildId, BigInt(guildId))))
+                .all();
 
-        const chatRestriction = userPref?.chatRestriction || 'always';
-        const chatLabel = chatRestriction === 'always' ? '✅ **Accept** messages from outsiders, even when the group is full.' : '🚫 **No messages** from outsiders unless the group has **open spots**.';
+            const chatRestriction = userPref?.chatRestriction || 'always';
+            const chatLabel = chatRestriction === 'always'
+                ? '✅ **Accept** messages from outsiders, even when the group is full.'
+                : '🚫 **No messages** from outsiders unless the group has **open spots**.';
 
-        // Get command IDs for links
-        const settingsCommand = this.container.client.application?.commands.cache.find((c) => c.name === 'settings');
-        const trustCmd = settingsCommand ? `</settings user trust:${settingsCommand.id}>` : '`/settings user trust`';
-        const blockCmd = settingsCommand ? `</settings user block:${settingsCommand.id}>` : '`/settings user block`';
-        const chatCmd = settingsCommand ? `</settings chat:${settingsCommand.id}>` : '`/settings chat`';
+            const description = stripIndent`
+            ## Chat from Outsiders
+            ${chatLabel}
 
-        const description = stripIndent`
-        ## ${chatCmd}
-        ${chatLabel}
+            ## Trust List
+            ${trusted.length} trusted users can update your VC.
 
-        ## ${trustCmd}
-        ${trusted.length} trusted users can run commands in your VC to:
-        - ✅ change voice limits
-        - ✅ change builds
+            ## Block List
+            ${blocked.length} blocked users cannot join or chat.
+            `
 
-        ## ${blockCmd}
-        ${blocked.length} blocked users are restricted in your VCs:
-        - ⛔ cannot join
-        - ⛔ cannot chat
-        `
+            const embed = new EmbedBuilder()
+                .setTitle('Your Settings')
+                .setColor(Colors.Blue)
+                .setDescription(description);
 
-        const embed = new EmbedBuilder()
-            .setTitle('Your Settings')
-            .setColor(Colors.Blue)
-            .setDescription(description);
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('settings-btn-chat')
+                    .setLabel('Chat Settings')
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('settings-btn-trust')
+                    .setLabel('Manage Trust')
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('settings-btn-block')
+                    .setLabel('Manage Blocks')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+
+            return { content: '', embeds: [embed], components: [row] };
+        };
+
+        const response = await interaction.reply({
+            ...(await renderDashboard()),
+            ephemeral: true
+        });
+
+        const collector = response.createMessageComponentCollector({
+            time: 300_000 // 5 minutes
+        });
+
+        collector.on('collect', async (i) => {
+            try {
+                if (i.user.id !== user.id) {
+                    await i.reply({ content: 'Only the command user can interact with this menu.', ephemeral: true });
+                    return;
+                }
+
+                if (i.customId === 'settings-btn-trust') {
+                    await this.handleTrust(i);
+                } else if (i.customId === 'settings-btn-block') {
+                    await this.handleBlock(i);
+                } else if (i.customId === 'settings-btn-chat') {
+                    await this.handleChat(i);
+                } else if (i.customId === 'settings-btn-back') {
+                    await i.update(await renderDashboard());
+                } else if (i.isUserSelectMenu()) {
+                    await this.handleUserSelect(i);
+                } else if (i.isStringSelectMenu()) {
+                    await this.handleStringSelect(i);
+                }
+            } catch (error) {
+                this.container.logger.error('[Settings] Error in dashboard collector:', error);
+                if (!i.replied && !i.deferred) {
+                    await i.reply({ content: 'An error occurred while processing your request.', ephemeral: true });
+                }
+            }
+        });
     }
 
-    public async chatInputTrust(interaction: Subcommand.ChatInputCommandInteraction) {
+    private async handleTrust(interaction: MessageComponentInteraction) {
         const { user, guildId } = interaction;
         if (!guildId) return;
 
@@ -142,82 +141,26 @@ export class UserCommand extends Subcommand {
             .where(and(eq(userTrust.userId, BigInt(user.id)), eq(userTrust.guildId, BigInt(guildId))))
             .all();
 
-        const defaultUsers = currentTrusted.map(t => t.trustedUserId.toString());
-
         const select = new UserSelectMenuBuilder()
             .setCustomId('settings-user-trust')
             .setPlaceholder('Select users to trust')
             .setMinValues(0)
             .setMaxValues(25)
-            .setDefaultUsers(defaultUsers.slice(0, 25));
+            .setDefaultUsers(currentTrusted.map(t => t.trustedUserId.toString()).slice(0, 25));
 
         const row = new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(select);
+        const backBtn = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId('settings-btn-back').setLabel('Back to Dashboard').setStyle(ButtonStyle.Secondary)
+        );
 
-        const response = await interaction.reply({
+        await interaction.update({
             content: 'Select the users you want to trust. Trusted users can always chat in your channels.',
-            components: [row],
-            ephemeral: true
-        });
-
-        const collector = response.createMessageComponentCollector({
-            componentType: ComponentType.UserSelect,
-            time: 60_000
-        });
-
-        collector.on('collect', async (i) => {
-            if (i.customId !== 'settings-user-trust') return;
-
-            const selectedUsers = i.values;
-            const now = new Date().toISOString();
-
-            // Logic: delete existing and re-add to persist timestamps for NEW ones? 
-            // Or just replace all? Requirement: "Persist timestamps for these entries."
-            // This implies if they were already there, we keep the old timestamp?
-            // Let's do a more careful update.
-
-            const existingIds = new Set(currentTrusted.map(t => t.trustedUserId.toString()));
-            const selectedSet = new Set(selectedUsers);
-
-            // Users to remove
-            const toRemove = [...existingIds].filter(id => !selectedSet.has(id));
-            // Users to add
-            const toAdd = [...selectedSet].filter(id => !existingIds.has(id));
-
-            for (const id of toRemove) {
-                await db.delete(userTrust).where(and(
-                    eq(userTrust.userId, BigInt(user.id)),
-                    eq(userTrust.guildId, BigInt(guildId)),
-                    eq(userTrust.trustedUserId, BigInt(id))
-                ));
-            }
-
-            if (toAdd.length > 0) {
-                await db.insert(userTrust).values(toAdd.map(id => ({
-                    userId: BigInt(user.id),
-                    guildId: BigInt(guildId),
-                    trustedUserId: BigInt(id),
-                    createdAt: now
-                })));
-            }
-
-            await i.update({
-                content: `Successfully updated your trust list. ${selectedUsers.length} users trusted.`,
-                components: []
-            });
-
-            // Reapply permissions if owner is in their channel
-            const member = interaction.member as import('discord.js').GuildMember;
-            const vc = member?.voice.channel;
-            if (vc && vc instanceof VoiceChannel) {
-                const isOwner = await db.select().from(tempChannels).where(and(eq(tempChannels.id, BigInt(vc.id)), eq(tempChannels.ownerId, BigInt(user.id)))).get();
-                if (isOwner) {
-                    await updateChannelPermissions(vc);
-                }
-            }
+            embeds: [],
+            components: [row, backBtn]
         });
     }
 
-    public async chatInputBlock(interaction: Subcommand.ChatInputCommandInteraction) {
+    private async handleBlock(interaction: MessageComponentInteraction) {
         const { user, guildId } = interaction;
         if (!guildId) return;
 
@@ -227,75 +170,26 @@ export class UserCommand extends Subcommand {
             .where(and(eq(userBlock.userId, BigInt(user.id)), eq(userBlock.guildId, BigInt(guildId))))
             .all();
 
-        const defaultUsers = currentBlocked.map(b => b.blockedUserId.toString());
-
         const select = new UserSelectMenuBuilder()
             .setCustomId('settings-user-block')
             .setPlaceholder('Select users to block')
             .setMinValues(0)
             .setMaxValues(25)
-            .setDefaultUsers(defaultUsers.slice(0, 25));
+            .setDefaultUsers(currentBlocked.map(b => b.blockedUserId.toString()).slice(0, 25));
 
         const row = new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(select);
+        const backBtn = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId('settings-btn-back').setLabel('Back to Dashboard').setStyle(ButtonStyle.Secondary)
+        );
 
-        const response = await interaction.reply({
+        await interaction.update({
             content: 'Select the users you want to block. Blocked users cannot join your channels.',
-            components: [row],
-            ephemeral: true
-        });
-
-        const collector = response.createMessageComponentCollector({
-            componentType: ComponentType.UserSelect,
-            time: 60_000
-        });
-
-        collector.on('collect', async (i) => {
-            if (i.customId !== 'settings-user-block') return;
-
-            const selectedUsers = i.values;
-            const now = new Date().toISOString();
-
-            const existingIds = new Set(currentBlocked.map(b => b.blockedUserId.toString()));
-            const selectedSet = new Set(selectedUsers);
-
-            const toRemove = [...existingIds].filter(id => !selectedSet.has(id));
-            const toAdd = [...selectedSet].filter(id => !existingIds.has(id));
-
-            for (const id of toRemove) {
-                await db.delete(userBlock).where(and(
-                    eq(userBlock.userId, BigInt(user.id)),
-                    eq(userBlock.guildId, BigInt(guildId)),
-                    eq(userBlock.blockedUserId, BigInt(id))
-                ));
-            }
-
-            if (toAdd.length > 0) {
-                await db.insert(userBlock).values(toAdd.map(id => ({
-                    userId: BigInt(user.id),
-                    guildId: BigInt(guildId),
-                    blockedUserId: BigInt(id),
-                    createdAt: now
-                })));
-            }
-
-            await i.update({
-                content: `Successfully updated your block list. ${selectedUsers.length} users blocked.`,
-                components: []
-            });
-
-            // Reapply permissions if owner is in their channel
-            const member = interaction.member as import('discord.js').GuildMember;
-            const vc = member?.voice.channel;
-            if (vc && vc instanceof VoiceChannel) {
-                const isOwner = await db.select().from(tempChannels).where(and(eq(tempChannels.id, BigInt(vc.id)), eq(tempChannels.ownerId, BigInt(user.id)))).get();
-                if (isOwner) {
-                    await updateChannelPermissions(vc);
-                }
-            }
+            embeds: [],
+            components: [row, backBtn]
         });
     }
 
-    public async chatInputChat(interaction: Subcommand.ChatInputCommandInteraction) {
+    private async handleChat(interaction: MessageComponentInteraction) {
         const { user, guildId } = interaction;
         if (!guildId) return;
 
@@ -326,49 +220,88 @@ export class UserCommand extends Subcommand {
             ]);
 
         const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+        const backBtn = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId('settings-btn-back').setLabel('Back to Dashboard').setStyle(ButtonStyle.Secondary)
+        );
 
-        const response = await interaction.reply({
+        await interaction.update({
             content: 'Select who is allowed to chat in your temporary channels.',
-            components: [row],
-            ephemeral: true
+            embeds: [],
+            components: [row, backBtn]
         });
+    }
 
-        const collector = response.createMessageComponentCollector({
-            componentType: ComponentType.StringSelect,
-            time: 60_000
-        });
+    private async handleUserSelect(interaction: UserSelectMenuInteraction) {
+        const { user, guildId, customId, values } = interaction;
+        if (!guildId) return;
 
-        collector.on('collect', async (i) => {
-            if (i.customId !== 'settings-chat-restriction') return;
+        const now = new Date().toISOString();
 
-            const newVal = i.values[0];
+        if (customId === 'settings-user-trust') {
+            const current = await db.select().from(userTrust).where(and(eq(userTrust.userId, BigInt(user.id)), eq(userTrust.guildId, BigInt(guildId)))).all();
+            const existingIds = new Set(current.map(t => t.trustedUserId.toString()));
+            const selectedSet = new Set(values);
 
-            await db
-                .insert(users)
-                .values({
-                    userId: BigInt(user.id),
-                    guildId: BigInt(guildId),
-                    chatRestriction: newVal
-                })
-                .onConflictDoUpdate({
-                    target: [users.userId, users.guildId],
-                    set: { chatRestriction: newVal }
-                });
+            const toRemove = [...existingIds].filter(id => !selectedSet.has(id));
+            const toAdd = [...selectedSet].filter(id => !existingIds.has(id));
 
-            await i.update({
-                content: `Chat restriction set to: **${newVal === 'always' ? 'Always allowed' : 'Only when spots open'}**.`,
-                components: []
-            });
-
-            // Reapply permissions if owner is in their channel
-            const member = interaction.member as import('discord.js').GuildMember;
-            const vc = member?.voice.channel;
-            if (vc && vc instanceof VoiceChannel) {
-                const isOwner = await db.select().from(tempChannels).where(and(eq(tempChannels.id, BigInt(vc.id)), eq(tempChannels.ownerId, BigInt(user.id)))).get();
-                if (isOwner) {
-                    await updateChannelPermissions(vc);
-                }
+            for (const id of toRemove) {
+                await db.delete(userTrust).where(and(eq(userTrust.userId, BigInt(user.id)), eq(userTrust.guildId, BigInt(guildId)), eq(userTrust.trustedUserId, BigInt(id))));
             }
+            if (toAdd.length > 0) {
+                await db.insert(userTrust).values(toAdd.map(id => ({ userId: BigInt(user.id), guildId: BigInt(guildId), trustedUserId: BigInt(id), createdAt: now })));
+            }
+            await this.finalizeUpdate(interaction, 'Trust List');
+        } else if (customId === 'settings-user-block') {
+            const current = await db.select().from(userBlock).where(and(eq(userBlock.userId, BigInt(user.id)), eq(userBlock.guildId, BigInt(guildId)))).all();
+            const existingIds = new Set(current.map(b => b.blockedUserId.toString()));
+            const selectedSet = new Set(values);
+
+            const toRemove = [...existingIds].filter(id => !selectedSet.has(id));
+            const toAdd = [...selectedSet].filter(id => !existingIds.has(id));
+
+            for (const id of toRemove) {
+                await db.delete(userBlock).where(and(eq(userBlock.userId, BigInt(user.id)), eq(userBlock.guildId, BigInt(guildId)), eq(userBlock.blockedUserId, BigInt(id))));
+            }
+            if (toAdd.length > 0) {
+                await db.insert(userBlock).values(toAdd.map(id => ({ userId: BigInt(user.id), guildId: BigInt(guildId), blockedUserId: BigInt(id), createdAt: now })));
+            }
+            await this.finalizeUpdate(interaction, 'Block List');
+        }
+    }
+
+    private async handleStringSelect(interaction: StringSelectMenuInteraction) {
+        const { user, guildId, customId, values } = interaction;
+        if (!guildId) return;
+
+        if (customId === 'settings-chat-restriction') {
+            const newVal = values[0];
+            await db.insert(users).values({ userId: BigInt(user.id), guildId: BigInt(guildId), chatRestriction: newVal })
+                .onConflictDoUpdate({ target: [users.userId, users.guildId], set: { chatRestriction: newVal } });
+
+            await this.finalizeUpdate(interaction, 'Chat Restriction');
+        }
+    }
+
+    private async finalizeUpdate(interaction: MessageComponentInteraction, label: string) {
+        const { user } = interaction;
+        await interaction.update({
+            content: `✅ Successfully updated your **${label}**.`,
+            components: [
+                new ActionRowBuilder<ButtonBuilder>().addComponents(
+                    new ButtonBuilder().setCustomId('settings-btn-back').setLabel('Back to Dashboard').setStyle(ButtonStyle.Success)
+                )
+            ]
         });
+
+        // Reapply permissions if owner is in their channel
+        const member = interaction.member as import('discord.js').GuildMember;
+        const vc = member?.voice.channel;
+        if (vc && vc.isVoiceBased()) {
+            const isOwner = await db.select().from(tempChannels).where(and(eq(tempChannels.id, BigInt(vc.id)), eq(tempChannels.ownerId, BigInt(user.id)))).get();
+            if (isOwner) {
+                await updateChannelPermissions(vc as any);
+            }
+        }
     }
 }

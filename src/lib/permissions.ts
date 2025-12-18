@@ -18,30 +18,13 @@ export async function updateChannelPermissions(channel: VoiceChannel) {
 
     const ownerId = tempChannel.ownerId;
 
-    // 2. Fetch owner's settings
-    const ownerSettings = await db
-        .select()
-        .from(users)
-        .where(and(eq(users.userId, ownerId), eq(users.guildId, guildId)))
-        .get();
-
-    const trusted = await db
-        .select()
-        .from(userTrust)
-        .where(and(eq(userTrust.userId, ownerId), eq(userTrust.guildId, guildId)))
-        .all();
-
-    const blocked = await db
-        .select()
-        .from(userBlock)
-        .where(and(eq(userBlock.userId, ownerId), eq(userBlock.guildId, guildId)))
-        .all();
-
-    const staffRoles = await db
-        .select()
-        .from(guildStaffRoles)
-        .where(eq(guildStaffRoles.guildId, guildId))
-        .all();
+    // 2. Fetch owner's settings and lists
+    const [ownerSettings, trusted, blocked, staffRoles] = await Promise.all([
+        db.select().from(users).where(and(eq(users.userId, ownerId), eq(users.guildId, guildId))).get(),
+        db.select().from(userTrust).where(and(eq(userTrust.userId, ownerId), eq(userTrust.guildId, guildId))).all(),
+        db.select().from(userBlock).where(and(eq(userBlock.userId, ownerId), eq(userBlock.guildId, guildId))).all(),
+        db.select().from(guildStaffRoles).where(eq(guildStaffRoles.guildId, guildId)).all()
+    ]);
 
     const trustedIds = new Set(trusted.map((t) => t.trustedUserId.toString()));
     const blockedIds = new Set(blocked.map((b) => b.blockedUserId.toString()));
@@ -49,105 +32,76 @@ export async function updateChannelPermissions(channel: VoiceChannel) {
 
     const chatRestriction = ownerSettings?.chatRestriction || 'always';
     const limit = channel.userLimit || 0;
-    const currentCount = channel.members.size;
-    const isFull = limit > 0 && currentCount >= limit;
+    const isFull = limit > 0 && channel.members.size >= limit;
+    const restrictChat = chatRestriction === 'open_spots' && isFull;
 
     // 3. Start with parent category permissions
-    const parentCategory = channel.parent;
     const overwrites: OverwriteResolvable[] =
-        parentCategory?.permissionOverwrites.cache.map((overwrite) => ({
+        channel.parent?.permissionOverwrites.cache.map((overwrite) => ({
             id: overwrite.id,
             allow: overwrite.allow.bitfield,
             deny: overwrite.deny.bitfield,
             type: overwrite.type
         })) ?? [];
 
-    // Helper to merge or add an overwrite
-    const addOverwrite = (overwrite: OverwriteResolvable) => {
-        const index = overwrites.findIndex((o) => o.id === overwrite.id);
+    // Helper to merge or add an overwrite (last one wins for the same ID)
+    const addOverwrite = (id: string, type: OverwriteType, allow: bigint = 0n, deny: bigint = 0n) => {
+        const index = overwrites.findIndex((o) => o.id === id);
         if (index !== -1) {
-            overwrites[index] = overwrite;
+            overwrites[index] = { id, type, allow, deny };
         } else {
-            overwrites.push(overwrite);
+            overwrites.push({ id, type, allow, deny });
         }
     };
 
-    // 4. Blocked users (Staff exempt)
+    // 4. Default Chat Access (@everyone)
+    // If restricted, deny chat. Otherwise, explicitly allow it for temp channel consistency.
+    addOverwrite(
+        guild.id,
+        OverwriteType.Role,
+        restrictChat ? 0n : PermissionFlagsBits.SendMessages,
+        restrictChat ? PermissionFlagsBits.SendMessages : 0n
+    );
+
+    // 5. Chat Exceptions (Trusted & Active Members)
+    // These only need explicit member-level overwrites if @everyone is restricted.
+    if (restrictChat) {
+        // Trusted Users
+        for (const tId of trustedIds) {
+            addOverwrite(tId, OverwriteType.Member, PermissionFlagsBits.SendMessages);
+        }
+        // Members currently in the VC (Don't auto-mute people when the channel fills up)
+        for (const mId of channel.members.keys()) {
+            addOverwrite(mId, OverwriteType.Member, PermissionFlagsBits.SendMessages);
+        }
+    }
+
+    // 6. Blocked Users (Staff exempt)
+    // Blocks take priority over trust/membership, so we process them later.
     for (const bId of blockedIds) {
         const member = guild.members.cache.get(bId);
         const isStaff = member?.roles.cache.some((r) => staffRoleIds.has(r.id));
 
         if (!isStaff) {
-            addOverwrite({
-                id: bId,
-                type: OverwriteType.Member,
-                deny: [PermissionFlagsBits.Connect, PermissionFlagsBits.SendMessages]
-            });
+            addOverwrite(
+                bId,
+                OverwriteType.Member,
+                0n,
+                PermissionFlagsBits.Connect | PermissionFlagsBits.SendMessages
+            );
         }
     }
 
-    // 5. Trusted users
-    for (const tId of trustedIds) {
-        addOverwrite({
-            id: tId,
-            type: OverwriteType.Member,
-            allow: [PermissionFlagsBits.SendMessages]
-        });
-    }
-
-    // 6. Staff Roles (Always allow)
-    for (const sRoleId of staffRoleIds) {
-        addOverwrite({
-            id: sRoleId,
-            type: OverwriteType.Role,
-            allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.SendMessages]
-        });
-    }
-
-    // 7. Users currently IN the VC
-    for (const mId of channel.members.keys()) {
-        addOverwrite({
-            id: mId,
-            type: OverwriteType.Member,
-            allow: [PermissionFlagsBits.SendMessages]
-        });
-    }
-
-    // 8. Dynamic chat restriction for @everyone
-    if (chatRestriction === 'open_spots') {
-        if (isFull) {
-            addOverwrite({
-                id: guild.id, // @everyone
-                type: OverwriteType.Role,
-                deny: [PermissionFlagsBits.SendMessages]
-            });
-        } else {
-            addOverwrite({
-                id: guild.id, // @everyone
-                type: OverwriteType.Role,
-                allow: [PermissionFlagsBits.SendMessages]
-            });
-        }
-    } else {
-        // Always allowed
-        addOverwrite({
-            id: guild.id,
-            type: OverwriteType.Role,
-            allow: [PermissionFlagsBits.SendMessages]
-        });
-    }
-
-    // 9. Owner always has management permissions
-    addOverwrite({
-        id: ownerId.toString(),
-        type: OverwriteType.Member,
-        allow: [
-            PermissionFlagsBits.Connect,
-            PermissionFlagsBits.ManageChannels,
-            PermissionFlagsBits.MoveMembers,
-            PermissionFlagsBits.SendMessages
-        ]
-    });
+    // 7. Owner (Management Access)
+    // Owner always gets SendMessages and management, regardless of restriction.
+    addOverwrite(
+        ownerId.toString(),
+        OverwriteType.Member,
+        PermissionFlagsBits.Connect |
+        PermissionFlagsBits.ManageChannels |
+        PermissionFlagsBits.MoveMembers |
+        PermissionFlagsBits.SendMessages
+    );
 
     await channel.permissionOverwrites.set(overwrites);
 }
