@@ -24,6 +24,14 @@ import { updateChannelPermissions } from '../../lib/permissions';
         {
             name: 'build',
             chatInputRun: 'chatInputBuild'
+        },
+        {
+            name: 'claim',
+            chatInputRun: 'chatInputClaim'
+        },
+        {
+            name: 'transfer',
+            chatInputRun: 'chatInputTransfer'
         }
     ]
 })
@@ -71,6 +79,22 @@ export class UserCommand extends Subcommand {
                             option
                                 .setName('build')
                                 .setDescription('The #farming-builds name (e.g. BBDC, R4DC, R4K, etc.)')
+                                .setRequired(true)
+                        )
+                )
+                .addSubcommand((command) =>
+                    command
+                        .setName('claim')
+                        .setDescription('Claim ownership of the temporary channel if the owner has left')
+                )
+                .addSubcommand((command) =>
+                    command
+                        .setName('transfer')
+                        .setDescription('Transfer ownership of your temporary channel to another member')
+                        .addUserOption((option) =>
+                            option
+                                .setName('user')
+                                .setDescription('The member to transfer ownership to')
                                 .setRequired(true)
                         )
                 )
@@ -365,6 +389,73 @@ export class UserCommand extends Subcommand {
         } catch (error) {
             this.container.logger.error(error);
             return interaction.reply({ content: 'Failed to update build. Rate limit or permissions?', ephemeral: true });
+        }
+    }
+
+    public async chatInputClaim(interaction: Subcommand.ChatInputCommandInteraction) {
+        const member = interaction.guild?.members.cache.get(interaction.user.id);
+        if (!member?.voice.channel) return this.sendAttentionEmbed(interaction);
+
+        const channel = member.voice.channel;
+        const tempChannel = await db.select().from(tempChannels).where(eq(tempChannels.id, BigInt(channel.id))).get();
+        if (!tempChannel) return this.sendAttentionEmbed(interaction);
+
+        // Check if owner is in the channel
+        const ownerInChannel = channel.members.has(tempChannel.ownerId.toString());
+        if (ownerInChannel) {
+            return interaction.reply({ content: 'You cannot claim this channel while the owner is still present.', ephemeral: true });
+        }
+
+        try {
+            await db.update(tempChannels).set({ ownerId: BigInt(interaction.user.id) }).where(eq(tempChannels.id, BigInt(channel.id)));
+            await updateChannelPermissions(channel as any);
+
+            const embed = new EmbedBuilder()
+                .setDescription(`👑 **${interaction.user.username}** has claimed ownership of this channel!`)
+                .setColor(Colors.Gold);
+
+            return interaction.reply({ embeds: [embed] });
+        } catch (error) {
+            this.container.logger.error(error);
+            return interaction.reply({ content: 'Failed to claim channel.', ephemeral: true });
+        }
+    }
+
+    public async chatInputTransfer(interaction: Subcommand.ChatInputCommandInteraction) {
+        const member = interaction.guild?.members.cache.get(interaction.user.id);
+        if (!member?.voice.channel) return this.sendAttentionEmbed(interaction);
+
+        const channel = member.voice.channel;
+        const tempChannel = await db.select().from(tempChannels).where(eq(tempChannels.id, BigInt(channel.id))).get();
+        if (!tempChannel) return this.sendAttentionEmbed(interaction);
+
+        if (tempChannel.ownerId !== BigInt(interaction.user.id)) {
+            return interaction.reply({ content: 'Only the current owner can transfer ownership.', ephemeral: true });
+        }
+
+        const targetUser = interaction.options.getUser('user', true);
+        const targetMember = channel.members.get(targetUser.id);
+
+        if (!targetMember) {
+            return interaction.reply({ content: 'The target user must be in the voice channel to receive ownership.', ephemeral: true });
+        }
+
+        if (targetUser.id === interaction.user.id) {
+            return interaction.reply({ content: 'You are already the owner.', ephemeral: true });
+        }
+
+        try {
+            await db.update(tempChannels).set({ ownerId: BigInt(targetUser.id) }).where(eq(tempChannels.id, BigInt(channel.id)));
+            await updateChannelPermissions(channel as any);
+
+            const embed = new EmbedBuilder()
+                .setDescription(`👑 Ownership has been transferred to **${targetUser.username}**!`)
+                .setColor(Colors.Gold);
+
+            return interaction.reply({ embeds: [embed] });
+        } catch (error) {
+            this.container.logger.error(error);
+            return interaction.reply({ content: 'Failed to transfer ownership.', ephemeral: true });
         }
     }
 }

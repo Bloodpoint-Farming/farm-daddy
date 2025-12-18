@@ -136,6 +136,7 @@ export class UserEvent extends Listener {
                     const groupLimitAction = groupCommand ? `</group limit:${groupCommand.id}>` : '`/group limit`';
                     const groupPlatformAction = groupCommand ? `</group platform:${groupCommand.id}>` : '`/group platform`';
                     const groupBuildAction = groupCommand ? `</group build:${groupCommand.id}>` : '`/group build`';
+                    const groupTransferAction = groupCommand ? `</group transfer:${groupCommand.id}>` : '`/group transfer`';
 
                     let welcomeContent = "";
 
@@ -151,7 +152,8 @@ export class UserEvent extends Listener {
                     welcomeContent += stripIndents`# Commands
                     - ${groupLimitAction} - set VC user limit
                     - ${groupPlatformAction} - set platform
-                    - ${groupBuildAction} - set build`;
+                    - ${groupBuildAction} - set build
+                    - ${groupTransferAction} - transfer ownership`;
 
                     // Send a welcome message in the new channel (text chat)
                     await newChannel.send({
