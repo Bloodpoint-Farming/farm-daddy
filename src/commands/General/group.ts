@@ -3,8 +3,8 @@ import { ApplyOptions } from '@sapphire/decorators';
 import { ApplicationCommandRegistry } from '@sapphire/framework';
 import { EmbedBuilder, Colors } from 'discord.js';
 import { db } from '../../db';
-import { creatorChannels, tempChannels, users } from '../../db/schema';
-import { eq } from 'drizzle-orm';
+import { creatorChannels, tempChannels, users, userTrust, userBlock } from '../../db/schema';
+import { eq, and } from 'drizzle-orm';
 import { PLATFORMS, type PlatformKey } from '../../lib/platforms';
 import { formatChannelName } from '../../lib/channelName';
 import { updateChannelPermissions } from '../../lib/permissions';
@@ -98,6 +98,10 @@ export class UserCommand extends Subcommand {
             return this.sendAttentionEmbed(interaction);
         }
 
+        if (!(await this.checkPermission(interaction, isTemp.ownerId))) {
+            return this.sendNoPermissionEmbed(interaction);
+        }
+
         try {
             const oldLimit = channel.userLimit
             await channel.setUserLimit(limit);
@@ -140,6 +144,61 @@ export class UserCommand extends Subcommand {
         return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
+    private async checkPermission(interaction: Subcommand.ChatInputCommandInteraction, ownerId: bigint) {
+        const { user, guildId } = interaction;
+        if (!guildId) return false;
+
+        // Owner can always run commands
+        if (BigInt(user.id) === ownerId) return true;
+
+        const ownerPrefs = await db
+            .select()
+            .from(users)
+            .where(and(eq(users.userId, ownerId), eq(users.guildId, BigInt(guildId))))
+            .get();
+
+        const restriction = ownerPrefs?.commandRestriction || 'anyone';
+
+        if (restriction === 'owner') return false;
+
+        if (restriction === 'trusted') {
+            const isTrusted = await db
+                .select()
+                .from(userTrust)
+                .where(and(
+                    eq(userTrust.userId, ownerId),
+                    eq(userTrust.guildId, BigInt(guildId)),
+                    eq(userTrust.trustedUserId, BigInt(user.id))
+                ))
+                .get();
+            return !!isTrusted;
+        }
+
+        if (restriction === 'anyone') {
+            const isBlocked = await db
+                .select()
+                .from(userBlock)
+                .where(and(
+                    eq(userBlock.userId, ownerId),
+                    eq(userBlock.guildId, BigInt(guildId)),
+                    eq(userBlock.blockedUserId, BigInt(user.id))
+                ))
+                .get();
+            return !isBlocked;
+        }
+
+        return false;
+    }
+
+    private async sendNoPermissionEmbed(interaction: Subcommand.ChatInputCommandInteraction) {
+        const embed = new EmbedBuilder()
+            .setTitle('Permission Denied')
+            .setDescription('You do not have permission to run group commands in this channel.')
+            .setColor(Colors.Red);
+
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
     public async chatInputPlatform(interaction: Subcommand.ChatInputCommandInteraction) {
         const member = interaction.guild?.members.cache.get(interaction.user.id);
         const platformKey = interaction.options.getString('platform', true) as PlatformKey;
@@ -159,6 +218,10 @@ export class UserCommand extends Subcommand {
 
         if (!tempChannel) {
             return this.sendAttentionEmbed(interaction);
+        }
+
+        if (!(await this.checkPermission(interaction, tempChannel.ownerId))) {
+            return this.sendNoPermissionEmbed(interaction);
         }
 
         // Fetch the creator channel to get the template
@@ -238,6 +301,10 @@ export class UserCommand extends Subcommand {
 
         if (!tempChannel) {
             return this.sendAttentionEmbed(interaction);
+        }
+
+        if (!(await this.checkPermission(interaction, tempChannel.ownerId))) {
+            return this.sendNoPermissionEmbed(interaction);
         }
 
         // Fetch the creator channel to get the template

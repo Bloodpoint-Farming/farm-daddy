@@ -59,9 +59,18 @@ export class UserCommand extends Command {
                 ? '✅ **Accept** messages from outsiders, even when the group is full.'
                 : '🚫 **No messages** from outsiders unless the group has **open spots**.';
 
+            const cmdRestriction = userPref?.commandRestriction || 'anyone';
+            let cmdLabel = '';
+            if (cmdRestriction === 'anyone') cmdLabel = '✅ **Anyone** can run `/group` commands (except blocked users).';
+            else if (cmdRestriction === 'trusted') cmdLabel = '🔒 Only **trusted users** can run `/group` commands.';
+            else cmdLabel = '👑 Only **you** can run `/group` commands.';
+
             const description = stripIndent`
             ## Chat from Outsiders
             ${chatLabel}
+
+            ## Command Access
+            ${cmdLabel}
 
             ## Trust List
             ${trusted.length} trusted users can update your VC.
@@ -79,6 +88,10 @@ export class UserCommand extends Command {
                 new ButtonBuilder()
                     .setCustomId('settings-btn-chat')
                     .setLabel('Chat Settings')
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('settings-btn-cmd')
+                    .setLabel('Command Access')
                     .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId('settings-btn-trust')
@@ -115,6 +128,8 @@ export class UserCommand extends Command {
                     await this.handleBlock(i);
                 } else if (i.customId === 'settings-btn-chat') {
                     await this.handleChat(i);
+                } else if (i.customId === 'settings-btn-cmd') {
+                    await this.handleCommandAccess(i);
                 } else if (i.customId === 'settings-btn-back') {
                     await i.update(await renderDashboard());
                 } else if (i.isUserSelectMenu()) {
@@ -231,6 +246,54 @@ export class UserCommand extends Command {
         });
     }
 
+    private async handleCommandAccess(interaction: MessageComponentInteraction) {
+        const { user, guildId } = interaction;
+        if (!guildId) return;
+
+        const userPref = await db
+            .select()
+            .from(users)
+            .where(and(eq(users.userId, BigInt(user.id)), eq(users.guildId, BigInt(guildId))))
+            .get();
+
+        const currentVal = userPref?.commandRestriction || 'anyone';
+
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('settings-cmd-restriction')
+            .setPlaceholder('Choose command access')
+            .addOptions([
+                {
+                    label: 'Anyone',
+                    value: 'anyone',
+                    description: 'Anyone can run /group commands (except blocked users).',
+                    default: currentVal === 'anyone'
+                },
+                {
+                    label: 'Trusted',
+                    value: 'trusted',
+                    description: 'Only you and your trusted users can run /group commands.',
+                    default: currentVal === 'trusted'
+                },
+                {
+                    label: 'Only You',
+                    value: 'owner',
+                    description: 'Only you can run /group commands in your VC.',
+                    default: currentVal === 'owner'
+                }
+            ]);
+
+        const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+        const backBtn = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId('settings-btn-back').setLabel('Back to Dashboard').setStyle(ButtonStyle.Secondary)
+        );
+
+        await interaction.update({
+            content: 'Select who is allowed to run `/group` commands in your temporary channels.',
+            embeds: [],
+            components: [row, backBtn]
+        });
+    }
+
     private async handleUserSelect(interaction: UserSelectMenuInteraction) {
         const { user, guildId, customId, values } = interaction;
         if (!guildId) return;
@@ -280,6 +343,12 @@ export class UserCommand extends Command {
                 .onConflictDoUpdate({ target: [users.userId, users.guildId], set: { chatRestriction: newVal } });
 
             await this.finalizeUpdate(interaction, 'Chat Restriction');
+        } else if (customId === 'settings-cmd-restriction') {
+            const newVal = values[0];
+            await db.insert(users).values({ userId: BigInt(user.id), guildId: BigInt(guildId), commandRestriction: newVal })
+                .onConflictDoUpdate({ target: [users.userId, users.guildId], set: { commandRestriction: newVal } });
+
+            await this.finalizeUpdate(interaction, 'Command Access');
         }
     }
 

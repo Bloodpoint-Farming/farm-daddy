@@ -79,7 +79,8 @@ export const users = sqliteTable('users', {
 	// Last selected build
 	lastBuild: text('last_build'),
 	// Chat restriction setting
-	chatRestriction: text('chat_restriction').notNull().default('always')
+	chatRestriction: text('chat_restriction').notNull().default('always'),
+	commandRestriction: text('command_restriction').notNull().default('anyone')
 }, (table) => ({
 	pk: primaryKey({ columns: [table.userId, table.guildId] })
 }));
