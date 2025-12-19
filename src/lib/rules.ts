@@ -8,8 +8,8 @@ import { and, eq } from 'drizzle-orm';
  * Fetches and posts the group rules for a given owner and creator channel to a text channel.
  * If no rules are defined, posts a default message with a link to settings.
  */
-export async function postGroupRules(channel: VoiceBasedChannel, ownerId: bigint, creatorChannelId: bigint) {
-    const guildId = BigInt(channel.guildId);
+export async function postGroupRules(channel: VoiceBasedChannel, ownerId: string, creatorChannelId: string) {
+    const guildId = channel.guildId;
 
     try {
         const ownerRules = await db

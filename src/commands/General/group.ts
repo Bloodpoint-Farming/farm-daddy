@@ -116,7 +116,7 @@ export class UserCommand extends Subcommand {
         const isTemp = await db
             .select()
             .from(tempChannels)
-            .where(eq(tempChannels.id, BigInt(channel.id)))
+            .where(eq(tempChannels.id, channel.id))
             .get();
 
         if (!isTemp) {
@@ -138,8 +138,8 @@ export class UserCommand extends Subcommand {
             await db
                 .insert(users)
                 .values({
-                    userId: BigInt(interaction.user.id),
-                    guildId: BigInt(interaction.guildId!),
+                    userId: interaction.user.id,
+                    guildId: interaction.guildId!,
                     lastLimit: limit
                 })
                 .onConflictDoUpdate({
@@ -158,7 +158,7 @@ export class UserCommand extends Subcommand {
     }
 
     private async sendAttentionEmbed(interaction: Subcommand.ChatInputCommandInteraction) {
-        const creators = await db.select().from(creatorChannels).where(eq(creatorChannels.guildId, BigInt(interaction.guildId!))).all();
+        const creators = await db.select().from(creatorChannels).where(eq(creatorChannels.guildId, interaction.guildId!)).all();
         const mentions = creators.map((c) => `<#${c.id}>`).join(', ');
 
         const embed = new EmbedBuilder()
@@ -169,17 +169,17 @@ export class UserCommand extends Subcommand {
         return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
-    private async checkPermission(interaction: Subcommand.ChatInputCommandInteraction, ownerId: bigint) {
+    private async checkPermission(interaction: Subcommand.ChatInputCommandInteraction, ownerId: string) {
         const { user, guildId } = interaction;
         if (!guildId) return false;
 
         // Owner can always run commands
-        if (BigInt(user.id) === ownerId) return true;
+        if (user.id === ownerId) return true;
 
         const ownerPrefs = await db
             .select()
             .from(users)
-            .where(and(eq(users.userId, ownerId), eq(users.guildId, BigInt(guildId))))
+            .where(and(eq(users.userId, ownerId), eq(users.guildId, guildId)))
             .get();
 
         const restriction = ownerPrefs?.commandRestriction || 'anyone';
@@ -192,8 +192,8 @@ export class UserCommand extends Subcommand {
                 .from(userTrust)
                 .where(and(
                     eq(userTrust.userId, ownerId),
-                    eq(userTrust.guildId, BigInt(guildId)),
-                    eq(userTrust.trustedUserId, BigInt(user.id))
+                    eq(userTrust.guildId, guildId),
+                    eq(userTrust.trustedUserId, user.id)
                 ))
                 .get();
             return !!isTrusted;
@@ -205,8 +205,8 @@ export class UserCommand extends Subcommand {
                 .from(userBlock)
                 .where(and(
                     eq(userBlock.userId, ownerId),
-                    eq(userBlock.guildId, BigInt(guildId)),
-                    eq(userBlock.blockedUserId, BigInt(user.id))
+                    eq(userBlock.guildId, guildId),
+                    eq(userBlock.blockedUserId, user.id)
                 ))
                 .get();
             return !isBlocked;
@@ -238,7 +238,7 @@ export class UserCommand extends Subcommand {
         const tempChannel = await db
             .select()
             .from(tempChannels)
-            .where(eq(tempChannels.id, BigInt(channel.id)))
+            .where(eq(tempChannels.id, channel.id))
             .get();
 
         if (!tempChannel) {
@@ -275,14 +275,14 @@ export class UserCommand extends Subcommand {
             await db
                 .update(tempChannels)
                 .set({ platform: platformKey })
-                .where(eq(tempChannels.id, BigInt(channel.id)));
+                .where(eq(tempChannels.id, channel.id));
 
             // Update user preferences
             await db
                 .insert(users)
                 .values({
-                    userId: BigInt(interaction.user.id),
-                    guildId: BigInt(interaction.guildId!),
+                    userId: interaction.user.id,
+                    guildId: interaction.guildId!,
                     lastPlatform: platformKey
                 })
                 .onConflictDoUpdate({
@@ -321,7 +321,7 @@ export class UserCommand extends Subcommand {
         const tempChannel = await db
             .select()
             .from(tempChannels)
-            .where(eq(tempChannels.id, BigInt(channel.id)))
+            .where(eq(tempChannels.id, channel.id))
             .get();
 
         if (!tempChannel) {
@@ -358,14 +358,14 @@ export class UserCommand extends Subcommand {
             await db
                 .update(tempChannels)
                 .set({ build })
-                .where(eq(tempChannels.id, BigInt(channel.id)));
+                .where(eq(tempChannels.id, channel.id));
 
             // Update user preferences
             await db
                 .insert(users)
                 .values({
-                    userId: BigInt(interaction.user.id),
-                    guildId: BigInt(interaction.guildId!),
+                    userId: interaction.user.id,
+                    guildId: interaction.guildId!,
                     lastBuild: build
                 })
                 .onConflictDoUpdate({
@@ -398,7 +398,7 @@ export class UserCommand extends Subcommand {
         if (!member?.voice.channel) return this.sendAttentionEmbed(interaction);
 
         const channel = member.voice.channel;
-        const tempChannel = await db.select().from(tempChannels).where(eq(tempChannels.id, BigInt(channel.id))).get();
+        const tempChannel = await db.select().from(tempChannels).where(eq(tempChannels.id, channel.id)).get();
         if (!tempChannel) return this.sendAttentionEmbed(interaction);
 
         // Check if owner is in the channel
@@ -408,7 +408,7 @@ export class UserCommand extends Subcommand {
         }
 
         try {
-            await db.update(tempChannels).set({ ownerId: BigInt(interaction.user.id) }).where(eq(tempChannels.id, BigInt(channel.id)));
+            await db.update(tempChannels).set({ ownerId: interaction.user.id }).where(eq(tempChannels.id, channel.id));
             await updateChannelPermissions(channel as any);
 
             const embed = new EmbedBuilder()
@@ -419,7 +419,7 @@ export class UserCommand extends Subcommand {
 
             // Post new owner's rules
             if (tempChannel.creatorChannelId) {
-                await postGroupRules(channel, BigInt(interaction.user.id), tempChannel.creatorChannelId);
+                await postGroupRules(channel, interaction.user.id, tempChannel.creatorChannelId);
             }
             return;
         } catch (error) {
@@ -433,10 +433,10 @@ export class UserCommand extends Subcommand {
         if (!member?.voice.channel) return this.sendAttentionEmbed(interaction);
 
         const channel = member.voice.channel;
-        const tempChannel = await db.select().from(tempChannels).where(eq(tempChannels.id, BigInt(channel.id))).get();
+        const tempChannel = await db.select().from(tempChannels).where(eq(tempChannels.id, channel.id)).get();
         if (!tempChannel) return this.sendAttentionEmbed(interaction);
 
-        if (tempChannel.ownerId !== BigInt(interaction.user.id)) {
+        if (tempChannel.ownerId !== interaction.user.id) {
             return interaction.reply({ content: 'Only the current owner can transfer ownership.', ephemeral: true });
         }
 
@@ -452,7 +452,7 @@ export class UserCommand extends Subcommand {
         }
 
         try {
-            await db.update(tempChannels).set({ ownerId: BigInt(targetUser.id) }).where(eq(tempChannels.id, BigInt(channel.id)));
+            await db.update(tempChannels).set({ ownerId: targetUser.id }).where(eq(tempChannels.id, channel.id));
             await updateChannelPermissions(channel as any);
 
             const embed = new EmbedBuilder()
@@ -463,7 +463,7 @@ export class UserCommand extends Subcommand {
 
             // Post new owner's rules
             if (tempChannel.creatorChannelId) {
-                await postGroupRules(channel, BigInt(targetUser.id), tempChannel.creatorChannelId);
+                await postGroupRules(channel, targetUser.id, tempChannel.creatorChannelId);
             }
             return;
         } catch (error) {

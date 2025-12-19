@@ -153,7 +153,7 @@ export class UserCommand extends Subcommand {
         const creators = await db
             .select()
             .from(creatorChannels)
-            .where(eq(creatorChannels.guildId, BigInt(guildId)))
+            .where(eq(creatorChannels.guildId, guildId))
             .all();
 
         const results = creators
@@ -182,8 +182,8 @@ export class UserCommand extends Subcommand {
             await db
                 .insert(creatorChannels)
                 .values({
-                    id: BigInt(channel.id),
-                    guildId: BigInt(interaction.guildId!),
+                    id: channel.id,
+                    guildId: interaction.guildId!,
                     defaultName: template
                 })
                 .onConflictDoUpdate({
@@ -212,8 +212,8 @@ export class UserCommand extends Subcommand {
             await db
                 .insert(platformRoles)
                 .values({
-                    roleId: BigInt(role.id),
-                    guildId: BigInt(interaction.guildId!),
+                    roleId: role.id,
+                    guildId: interaction.guildId!,
                     platform: platformKey
                 })
                 .onConflictDoUpdate({
@@ -239,7 +239,7 @@ export class UserCommand extends Subcommand {
         const channelId = interaction.options.getString('channel', true);
 
         // Verify it is a creator channel
-        const data = await db.select().from(creatorChannels).where(eq(creatorChannels.id, BigInt(channelId))).get();
+        const data = await db.select().from(creatorChannels).where(eq(creatorChannels.id, channelId)).get();
 
         if (!data) {
             return interaction.reply({ content: 'That channel is no longer a configured Creator Channel.', ephemeral: true });
@@ -275,7 +275,7 @@ export class UserCommand extends Subcommand {
             await db
                 .update(creatorChannels)
                 .set({ welcomeMessage: newMessage || null })
-                .where(eq(creatorChannels.id, BigInt(channelId)));
+                .where(eq(creatorChannels.id, channelId));
 
             await submission.reply({
                 content: `Welcome message for <#${channelId}> has been ${newMessage ? 'updated' : 'cleared'}.`,
@@ -295,7 +295,7 @@ export class UserCommand extends Subcommand {
         const guild = interaction.guild;
         if (!guild) return;
 
-        const creators = await db.select().from(creatorChannels).where(eq(creatorChannels.guildId, BigInt(guild.id))).all();
+        const creators = await db.select().from(creatorChannels).where(eq(creatorChannels.guildId, guild.id)).all();
 
         if (creators.length === 0) {
             return interaction.reply({ content: 'No Creator Channels configured.', ephemeral: true });
@@ -337,7 +337,7 @@ export class UserCommand extends Subcommand {
     public async chatInputRemove(interaction: Subcommand.ChatInputCommandInteraction) {
         const channelId = interaction.options.getString('channel', true);
 
-        const result = await db.delete(creatorChannels).where(eq(creatorChannels.id, BigInt(channelId))).returning();
+        const result = await db.delete(creatorChannels).where(eq(creatorChannels.id, channelId)).returning();
 
         if (result.length === 0) {
             return interaction.reply({ content: 'That channel was not a configured Creator Channel.', ephemeral: true });
@@ -353,7 +353,7 @@ export class UserCommand extends Subcommand {
         const staffRoles = await db
             .select()
             .from(guildStaffRoles)
-            .where(eq(guildStaffRoles.guildId, BigInt(guildId)))
+            .where(eq(guildStaffRoles.guildId, guildId))
             .all();
 
         const roleIds = staffRoles.map((r) => r.roleId.toString());
@@ -384,13 +384,13 @@ export class UserCommand extends Subcommand {
             const selectedRoles = i.values;
 
             // Update DB: Delete all and re-insert
-            await db.delete(guildStaffRoles).where(eq(guildStaffRoles.guildId, BigInt(guildId)));
+            await db.delete(guildStaffRoles).where(eq(guildStaffRoles.guildId, guildId));
 
             if (selectedRoles.length > 0) {
                 await db.insert(guildStaffRoles).values(
                     selectedRoles.map((id) => ({
-                        guildId: BigInt(guildId),
-                        roleId: BigInt(id)
+                        guildId: guildId,
+                        roleId: id
                     }))
                 );
             }

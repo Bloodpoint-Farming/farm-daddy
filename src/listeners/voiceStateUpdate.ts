@@ -24,13 +24,13 @@ export class UserEvent extends Listener {
                 const isTemp = await db
                     .select()
                     .from(tempChannels)
-                    .where(eq(tempChannels.id, BigInt(oldState.channelId)))
+                    .where(eq(tempChannels.id, oldState.channelId))
                     .get();
                 if (isTemp) {
                     try {
                         this.container.logger.debug(`[VoiceStateUpdate] Deleting empty temp channel ${oldState.channelId}`);
                         await oldState.channel.delete();
-                        await db.delete(tempChannels).where(eq(tempChannels.id, BigInt(oldState.channelId)));
+                        await db.delete(tempChannels).where(eq(tempChannels.id, oldState.channelId));
                     } catch (error) {
                         this.container.logger.error('Error deleting temp channel:', error);
                     }
@@ -51,7 +51,7 @@ export class UserEvent extends Listener {
             const result = await db
                 .select()
                 .from(creatorChannels)
-                .where(eq(creatorChannels.id, BigInt(newState.channelId)))
+                .where(eq(creatorChannels.id, newState.channelId))
                 .get();
 
             if (result) {
@@ -65,17 +65,17 @@ export class UserEvent extends Listener {
                     const userSettings = await db
                         .select()
                         .from(users)
-                        .where(and(eq(users.userId, BigInt(member.id)), eq(users.guildId, BigInt(newState.guild.id))))
+                        .where(and(eq(users.userId, member.id), eq(users.guildId, newState.guild.id)))
                         .get();
 
                     // Infer platform from user roles if not set in preferences
                     let platformKey: PlatformKey | null = userSettings?.lastPlatform as PlatformKey || null;
                     if (!platformKey) {
-                        const userRoles = member.roles.cache.map((r) => BigInt(r.id));
+                        const userRoles = member.roles.cache.map((r) => r.id);
                         const matchingRoles = await db
                             .select()
                             .from(platformRoles)
-                            .where(eq(platformRoles.guildId, BigInt(newState.guild.id)))
+                            .where(eq(platformRoles.guildId, newState.guild.id))
                             .all();
 
                         const matches = matchingRoles.filter((pr) => userRoles.includes(pr.roleId));
@@ -117,9 +117,9 @@ export class UserEvent extends Listener {
 
                     // Track in DB FIRST so updateChannelPermissions can find it
                     await db.insert(tempChannels).values({
-                        id: BigInt(newChannel.id),
-                        guildId: BigInt(newState.guild.id),
-                        ownerId: BigInt(member.id),
+                        id: newChannel.id,
+                        guildId: newState.guild.id,
+                        ownerId: member.id,
                         createdAt: new Date().toISOString(),
                         platform: platformKey,
                         build,
@@ -172,7 +172,7 @@ export class UserEvent extends Listener {
                     });
 
                     // Post rules
-                    await postGroupRules(newChannel, BigInt(member.id), BigInt(result.id));
+                    await postGroupRules(newChannel, member.id, result.id);
                 } catch (error) {
                     this.container.logger.error('Error creating temporary channel:', error);
                 }
@@ -185,7 +185,7 @@ export class UserEvent extends Listener {
             const channel = newState.guild.channels.cache.get(channelId);
             if (channel?.type === ChannelType.GuildVoice) {
                 // We only care if it's a tracked temp channel
-                const isTemp = await db.select().from(tempChannels).where(eq(tempChannels.id, BigInt(channelId))).get();
+                const isTemp = await db.select().from(tempChannels).where(eq(tempChannels.id, channelId)).get();
                 if (isTemp) {
                     await updateChannelPermissions(channel as VoiceChannel);
                 }

@@ -1,16 +1,16 @@
 import { sqliteTable, text, customType, primaryKey } from 'drizzle-orm/sqlite-core';
 
-// Custom type to handle BigInts with defaultSafeIntegers: true
-// This is effectively a pass-through at runtime, but ensures TypeScript knows it's a bigint.
-const snowflake = customType<{ data: bigint; driverData: bigint }>({
+// Custom type to handle Discord Snowflakes (BigInts) as strings in the application
+// but as BigInts (integer) in the database. This aligns with discord.js Snowflake types.
+const snowflake = customType<{ data: string; driverData: bigint }>({
 	dataType() {
 		return 'integer';
 	},
-	fromDriver(value: unknown): bigint {
-		return value as bigint;
+	fromDriver(value: unknown): string {
+		return String(value);
 	},
-	toDriver(value: bigint): bigint {
-		return value;
+	toDriver(value: string | bigint): bigint {
+		return typeof value === 'bigint' ? value : BigInt(value);
 	}
 });
 

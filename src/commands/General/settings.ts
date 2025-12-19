@@ -43,19 +43,19 @@ export class UserCommand extends Command {
             const userPref = await db
                 .select()
                 .from(users)
-                .where(and(eq(users.userId, BigInt(user.id)), eq(users.guildId, BigInt(guildId))))
+                .where(and(eq(users.userId, user.id), eq(users.guildId, guildId)))
                 .get();
 
             const trusted = await db
                 .select()
                 .from(userTrust)
-                .where(and(eq(userTrust.userId, BigInt(user.id)), eq(userTrust.guildId, BigInt(guildId))))
+                .where(and(eq(userTrust.userId, user.id), eq(userTrust.guildId, guildId)))
                 .all();
 
             const blocked = await db
                 .select()
                 .from(userBlock)
-                .where(and(eq(userBlock.userId, BigInt(user.id)), eq(userBlock.guildId, BigInt(guildId))))
+                .where(and(eq(userBlock.userId, user.id), eq(userBlock.guildId, guildId)))
                 .all();
 
             const chatRestriction = userPref?.chatRestriction || 'always';
@@ -163,7 +163,7 @@ export class UserCommand extends Command {
         const currentTrusted = await db
             .select()
             .from(userTrust)
-            .where(and(eq(userTrust.userId, BigInt(user.id)), eq(userTrust.guildId, BigInt(guildId))))
+            .where(and(eq(userTrust.userId, user.id), eq(userTrust.guildId, guildId)))
             .all();
 
         const select = new UserSelectMenuBuilder()
@@ -192,7 +192,7 @@ export class UserCommand extends Command {
         const currentBlocked = await db
             .select()
             .from(userBlock)
-            .where(and(eq(userBlock.userId, BigInt(user.id)), eq(userBlock.guildId, BigInt(guildId))))
+            .where(and(eq(userBlock.userId, user.id), eq(userBlock.guildId, guildId)))
             .all();
 
         const select = new UserSelectMenuBuilder()
@@ -221,7 +221,7 @@ export class UserCommand extends Command {
         const userPref = await db
             .select()
             .from(users)
-            .where(and(eq(users.userId, BigInt(user.id)), eq(users.guildId, BigInt(guildId))))
+            .where(and(eq(users.userId, user.id), eq(users.guildId, guildId)))
             .get();
 
         const currentVal = userPref?.chatRestriction || 'always';
@@ -263,7 +263,7 @@ export class UserCommand extends Command {
         const userPref = await db
             .select()
             .from(users)
-            .where(and(eq(users.userId, BigInt(user.id)), eq(users.guildId, BigInt(guildId))))
+            .where(and(eq(users.userId, user.id), eq(users.guildId, guildId)))
             .get();
 
         const currentVal = userPref?.commandRestriction || 'anyone';
@@ -313,7 +313,7 @@ export class UserCommand extends Command {
         const now = new Date().toISOString();
 
         if (customId === 'settings-user-trust') {
-            const current = await db.select().from(userTrust).where(and(eq(userTrust.userId, BigInt(user.id)), eq(userTrust.guildId, BigInt(guildId)))).all();
+            const current = await db.select().from(userTrust).where(and(eq(userTrust.userId, user.id), eq(userTrust.guildId, guildId))).all();
             const existingIds = new Set(current.map(t => t.trustedUserId.toString()));
             const selectedSet = new Set(filteredValues);
 
@@ -321,18 +321,18 @@ export class UserCommand extends Command {
             const toAdd = [...selectedSet].filter(id => !existingIds.has(id));
 
             for (const id of toRemove) {
-                await db.delete(userTrust).where(and(eq(userTrust.userId, BigInt(user.id)), eq(userTrust.guildId, BigInt(guildId)), eq(userTrust.trustedUserId, BigInt(id))));
+                await db.delete(userTrust).where(and(eq(userTrust.userId, user.id), eq(userTrust.guildId, guildId), eq(userTrust.trustedUserId, id)));
             }
             if (toAdd.length > 0) {
                 for (const id of toAdd) {
                     // Remove from block list if being added to trust list
-                    await db.delete(userBlock).where(and(eq(userBlock.userId, BigInt(user.id)), eq(userBlock.guildId, BigInt(guildId)), eq(userBlock.blockedUserId, BigInt(id))));
-                    await db.insert(userTrust).values({ userId: BigInt(user.id), guildId: BigInt(guildId), trustedUserId: BigInt(id), createdAt: now });
+                    await db.delete(userBlock).where(and(eq(userBlock.userId, user.id), eq(userBlock.guildId, guildId), eq(userBlock.blockedUserId, id)));
+                    await db.insert(userTrust).values({ userId: user.id, guildId: guildId, trustedUserId: id, createdAt: now });
                 }
             }
             await this.finalizeUpdate(interaction, 'Trust List');
         } else if (customId === 'settings-user-block') {
-            const current = await db.select().from(userBlock).where(and(eq(userBlock.userId, BigInt(user.id)), eq(userBlock.guildId, BigInt(guildId)))).all();
+            const current = await db.select().from(userBlock).where(and(eq(userBlock.userId, user.id), eq(userBlock.guildId, guildId))).all();
             const existingIds = new Set(current.map(b => b.blockedUserId.toString()));
             const selectedSet = new Set(filteredValues);
 
@@ -340,13 +340,13 @@ export class UserCommand extends Command {
             const toAdd = [...selectedSet].filter(id => !existingIds.has(id));
 
             for (const id of toRemove) {
-                await db.delete(userBlock).where(and(eq(userBlock.userId, BigInt(user.id)), eq(userBlock.guildId, BigInt(guildId)), eq(userBlock.blockedUserId, BigInt(id))));
+                await db.delete(userBlock).where(and(eq(userBlock.userId, user.id), eq(userBlock.guildId, guildId), eq(userBlock.blockedUserId, id)));
             }
             if (toAdd.length > 0) {
                 for (const id of toAdd) {
                     // Remove from trust list if being added to block list
-                    await db.delete(userTrust).where(and(eq(userTrust.userId, BigInt(user.id)), eq(userTrust.guildId, BigInt(guildId)), eq(userTrust.trustedUserId, BigInt(id))));
-                    await db.insert(userBlock).values({ userId: BigInt(user.id), guildId: BigInt(guildId), blockedUserId: BigInt(id), createdAt: now });
+                    await db.delete(userTrust).where(and(eq(userTrust.userId, user.id), eq(userTrust.guildId, guildId), eq(userTrust.trustedUserId, id)));
+                    await db.insert(userBlock).values({ userId: user.id, guildId: guildId, blockedUserId: id, createdAt: now });
                 }
             }
             await this.finalizeUpdate(interaction, 'Block List');
@@ -357,7 +357,7 @@ export class UserCommand extends Command {
         const { guildId } = interaction;
         if (!guildId) return;
 
-        const creators = await db.select().from(creatorChannels).where(eq(creatorChannels.guildId, BigInt(guildId))).all();
+        const creators = await db.select().from(creatorChannels).where(eq(creatorChannels.guildId, guildId)).all();
 
         if (creators.length === 0) {
             return interaction.update({
@@ -403,14 +403,14 @@ export class UserCommand extends Command {
 
         if (customId === 'settings-chat-restriction') {
             const newVal = values[0];
-            await db.insert(users).values({ userId: BigInt(user.id), guildId: BigInt(guildId), chatRestriction: newVal })
+            await db.insert(users).values({ userId: user.id, guildId: guildId, chatRestriction: newVal })
                 .onConflictDoUpdate({ target: [users.userId, users.guildId], set: { chatRestriction: newVal } });
 
             await this.finalizeUpdate(interaction, 'Chat Restriction');
             return;
         } else if (customId === 'settings-cmd-restriction') {
             const newVal = values[0];
-            await db.insert(users).values({ userId: BigInt(user.id), guildId: BigInt(guildId), commandRestriction: newVal })
+            await db.insert(users).values({ userId: user.id, guildId: guildId, commandRestriction: newVal })
                 .onConflictDoUpdate({ target: [users.userId, users.guildId], set: { commandRestriction: newVal } });
 
             await this.finalizeUpdate(interaction, 'Command Access');
@@ -423,9 +423,9 @@ export class UserCommand extends Command {
                 .select()
                 .from(userRules)
                 .where(and(
-                    eq(userRules.userId, BigInt(user.id)),
-                    eq(userRules.guildId, BigInt(guildId)),
-                    eq(userRules.creatorChannelId, BigInt(creatorId))
+                    eq(userRules.userId, user.id),
+                    eq(userRules.guildId, guildId),
+                    eq(userRules.creatorChannelId, creatorId)
                 ))
                 .get();
 
@@ -459,17 +459,17 @@ export class UserCommand extends Command {
                     await db
                         .delete(userRules)
                         .where(and(
-                            eq(userRules.userId, BigInt(user.id)),
-                            eq(userRules.guildId, BigInt(guildId)),
-                            eq(userRules.creatorChannelId, BigInt(creatorId))
+                            eq(userRules.userId, user.id),
+                            eq(userRules.guildId, guildId),
+                            eq(userRules.creatorChannelId, creatorId)
                         ));
                 } else {
                     await db
                         .insert(userRules)
                         .values({
-                            userId: BigInt(user.id),
-                            guildId: BigInt(guildId),
-                            creatorChannelId: BigInt(creatorId),
+                            userId: user.id,
+                            guildId: guildId,
+                            creatorChannelId: creatorId,
                             rules
                         })
                         .onConflictDoUpdate({
@@ -509,7 +509,7 @@ export class UserCommand extends Command {
         const member = interaction.member as import('discord.js').GuildMember;
         const vc = member?.voice.channel;
         if (vc && vc.isVoiceBased()) {
-            const isOwner = await db.select().from(tempChannels).where(and(eq(tempChannels.id, BigInt(vc.id)), eq(tempChannels.ownerId, BigInt(user.id)))).get();
+            const isOwner = await db.select().from(tempChannels).where(and(eq(tempChannels.id, vc.id), eq(tempChannels.ownerId, user.id))).get();
             if (isOwner) {
                 await updateChannelPermissions(vc as any);
             }

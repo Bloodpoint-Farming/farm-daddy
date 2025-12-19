@@ -5,13 +5,13 @@ import { eq, and } from 'drizzle-orm';
 
 export async function updateChannelPermissions(channel: VoiceChannel) {
     const guild = channel.guild;
-    const guildId = BigInt(guild.id);
+    const guildId = guild.id;
 
     // 1. Fetch channel info to find the owner
     const tempChannel = await db
         .select()
         .from(tempChannels)
-        .where(eq(tempChannels.id, BigInt(channel.id)))
+        .where(eq(tempChannels.id, channel.id))
         .get();
 
     if (!tempChannel) return;
