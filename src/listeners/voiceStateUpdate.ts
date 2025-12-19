@@ -1,13 +1,14 @@
 import { ApplyOptions } from '@sapphire/decorators';
 import { Listener } from '@sapphire/framework';
-import { ChannelType, PermissionFlagsBits, type VoiceState, type VoiceChannel } from 'discord.js';
+import { ChannelType, type VoiceState, type VoiceChannel, PermissionFlagsBits } from 'discord.js';
 import { db } from '../db';
-import { creatorChannels, tempChannels, platformRoles, users, userRules } from '../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { creatorChannels, tempChannels, users, platformRoles } from '../db/schema';
+import { and, eq } from 'drizzle-orm';
 import { stripIndents } from 'common-tags';
 import type { PlatformKey } from '../lib/platforms';
 import { formatChannelName } from '../lib/channelName';
 import { updateChannelPermissions } from '../lib/permissions';
+import { postGroupRules } from '../lib/rules';
 
 @ApplyOptions<Listener.Options>({
     event: 'voiceStateUpdate'
@@ -170,23 +171,8 @@ export class UserEvent extends Listener {
                         allowedMentions: { users: [] }
                     });
 
-                    // Fetch and post owner's rules for this creator channel
-                    const ownerRules = await db
-                        .select()
-                        .from(userRules)
-                        .where(and(
-                            eq(userRules.userId, BigInt(member.id)),
-                            eq(userRules.guildId, BigInt(newState.guild.id)),
-                            eq(userRules.creatorChannelId, BigInt(result.id))
-                        ))
-                        .get();
-
-                    if (ownerRules) {
-                        await newChannel.send({
-                            content: `## Group Rules 📜\n${ownerRules.rules}`,
-                            allowedMentions: { users: [] }
-                        });
-                    }
+                    // Post rules
+                    await postGroupRules(newChannel, BigInt(member.id), BigInt(result.id));
                 } catch (error) {
                     this.container.logger.error('Error creating temporary channel:', error);
                 }

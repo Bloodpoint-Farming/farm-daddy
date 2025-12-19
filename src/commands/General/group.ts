@@ -3,11 +3,12 @@ import { ApplyOptions } from '@sapphire/decorators';
 import { ApplicationCommandRegistry } from '@sapphire/framework';
 import { EmbedBuilder, Colors } from 'discord.js';
 import { db } from '../../db';
-import { creatorChannels, tempChannels, users, userTrust, userBlock, userRules } from '../../db/schema';
+import { creatorChannels, tempChannels, users, userTrust, userBlock } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { PLATFORMS, type PlatformKey } from '../../lib/platforms';
 import { formatChannelName } from '../../lib/channelName';
 import { updateChannelPermissions } from '../../lib/permissions';
+import { postGroupRules } from '../../lib/rules';
 
 @ApplyOptions<Subcommand.Options>({
     name: 'group',
@@ -418,22 +419,7 @@ export class UserCommand extends Subcommand {
 
             // Post new owner's rules
             if (tempChannel.creatorChannelId) {
-                const ownerRules = await db
-                    .select()
-                    .from(userRules)
-                    .where(and(
-                        eq(userRules.userId, BigInt(interaction.user.id)),
-                        eq(userRules.guildId, BigInt(interaction.guildId!)),
-                        eq(userRules.creatorChannelId, tempChannel.creatorChannelId)
-                    ))
-                    .get();
-
-                if (ownerRules) {
-                    await channel.send({
-                        content: `## Group Rules 📜\n${ownerRules.rules}`,
-                        allowedMentions: { users: [] }
-                    });
-                }
+                await postGroupRules(channel, BigInt(interaction.user.id), tempChannel.creatorChannelId);
             }
             return;
         } catch (error) {
@@ -477,22 +463,7 @@ export class UserCommand extends Subcommand {
 
             // Post new owner's rules
             if (tempChannel.creatorChannelId) {
-                const ownerRules = await db
-                    .select()
-                    .from(userRules)
-                    .where(and(
-                        eq(userRules.userId, BigInt(targetUser.id)),
-                        eq(userRules.guildId, BigInt(interaction.guildId!)),
-                        eq(userRules.creatorChannelId, tempChannel.creatorChannelId)
-                    ))
-                    .get();
-
-                if (ownerRules) {
-                    await channel.send({
-                        content: `## Group Rules 📜\n${ownerRules.rules}`,
-                        allowedMentions: { users: [] }
-                    });
-                }
+                await postGroupRules(channel, BigInt(targetUser.id), tempChannel.creatorChannelId);
             }
             return;
         } catch (error) {
