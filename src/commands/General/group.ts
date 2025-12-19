@@ -3,7 +3,7 @@ import { ApplyOptions } from '@sapphire/decorators';
 import { ApplicationCommandRegistry } from '@sapphire/framework';
 import { EmbedBuilder, Colors } from 'discord.js';
 import { db } from '../../db';
-import { creatorChannels, tempChannels, users, userTrust, userBlock } from '../../db/schema';
+import { creatorChannels, tempChannels, users, userTrust, userBlock, userRules } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { PLATFORMS, type PlatformKey } from '../../lib/platforms';
 import { formatChannelName } from '../../lib/channelName';
@@ -414,7 +414,28 @@ export class UserCommand extends Subcommand {
                 .setDescription(`👑 **${interaction.user.username}** has claimed ownership of this channel!`)
                 .setColor(Colors.Gold);
 
-            return interaction.reply({ embeds: [embed] });
+            await interaction.reply({ embeds: [embed] });
+
+            // Post new owner's rules
+            if (tempChannel.creatorChannelId) {
+                const ownerRules = await db
+                    .select()
+                    .from(userRules)
+                    .where(and(
+                        eq(userRules.userId, BigInt(interaction.user.id)),
+                        eq(userRules.guildId, BigInt(interaction.guildId!)),
+                        eq(userRules.creatorChannelId, tempChannel.creatorChannelId)
+                    ))
+                    .get();
+
+                if (ownerRules) {
+                    await channel.send({
+                        content: `## Group Rules 📜\n${ownerRules.rules}`,
+                        allowedMentions: { users: [] }
+                    });
+                }
+            }
+            return;
         } catch (error) {
             this.container.logger.error(error);
             return interaction.reply({ content: 'Failed to claim channel.', ephemeral: true });
@@ -452,7 +473,28 @@ export class UserCommand extends Subcommand {
                 .setDescription(`👑 Ownership has been transferred to **${targetUser.username}**!`)
                 .setColor(Colors.Gold);
 
-            return interaction.reply({ embeds: [embed] });
+            await interaction.reply({ embeds: [embed] });
+
+            // Post new owner's rules
+            if (tempChannel.creatorChannelId) {
+                const ownerRules = await db
+                    .select()
+                    .from(userRules)
+                    .where(and(
+                        eq(userRules.userId, BigInt(targetUser.id)),
+                        eq(userRules.guildId, BigInt(interaction.guildId!)),
+                        eq(userRules.creatorChannelId, tempChannel.creatorChannelId)
+                    ))
+                    .get();
+
+                if (ownerRules) {
+                    await channel.send({
+                        content: `## Group Rules 📜\n${ownerRules.rules}`,
+                        allowedMentions: { users: [] }
+                    });
+                }
+            }
+            return;
         } catch (error) {
             this.container.logger.error(error);
             return interaction.reply({ content: 'Failed to transfer ownership.', ephemeral: true });

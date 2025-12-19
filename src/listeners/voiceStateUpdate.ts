@@ -2,7 +2,7 @@ import { ApplyOptions } from '@sapphire/decorators';
 import { Listener } from '@sapphire/framework';
 import { ChannelType, PermissionFlagsBits, type VoiceState, type VoiceChannel } from 'discord.js';
 import { db } from '../db';
-import { creatorChannels, tempChannels, platformRoles, users } from '../db/schema';
+import { creatorChannels, tempChannels, platformRoles, users, userRules } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { stripIndents } from 'common-tags';
 import type { PlatformKey } from '../lib/platforms';
@@ -169,6 +169,24 @@ export class UserEvent extends Listener {
                         content: welcomeContent,
                         allowedMentions: { users: [] }
                     });
+
+                    // Fetch and post owner's rules for this creator channel
+                    const ownerRules = await db
+                        .select()
+                        .from(userRules)
+                        .where(and(
+                            eq(userRules.userId, BigInt(member.id)),
+                            eq(userRules.guildId, BigInt(newState.guild.id)),
+                            eq(userRules.creatorChannelId, BigInt(result.id))
+                        ))
+                        .get();
+
+                    if (ownerRules) {
+                        await newChannel.send({
+                            content: `## Group Rules 📜\n${ownerRules.rules}`,
+                            allowedMentions: { users: [] }
+                        });
+                    }
                 } catch (error) {
                     this.container.logger.error('Error creating temporary channel:', error);
                 }

@@ -10,10 +10,14 @@ import {
     ButtonStyle,
     MessageComponentInteraction,
     UserSelectMenuInteraction,
-    StringSelectMenuInteraction
+    StringSelectMenuInteraction,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    ModalSubmitInteraction
 } from 'discord.js';
 import { db } from '../../db';
-import { users, userTrust, userBlock, tempChannels } from '../../db/schema';
+import { users, userTrust, userBlock, tempChannels, creatorChannels, userRules } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { updateChannelPermissions } from '../../lib/permissions';
 import { stripIndent } from 'common-tags';
@@ -100,6 +104,10 @@ export class UserCommand extends Command {
                 new ButtonBuilder()
                     .setCustomId('settings-btn-block')
                     .setLabel('Manage Blocks')
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('settings-btn-rules')
+                    .setLabel('Manage Rules')
                     .setStyle(ButtonStyle.Secondary)
             );
 
@@ -130,6 +138,8 @@ export class UserCommand extends Command {
                     await this.handleChat(i);
                 } else if (i.customId === 'settings-btn-cmd') {
                     await this.handleCommandAccess(i);
+                } else if (i.customId === 'settings-btn-rules') {
+                    await this.handleRules(i);
                 } else if (i.customId === 'settings-btn-back') {
                     await i.update(await renderDashboard());
                 } else if (i.isUserSelectMenu()) {
@@ -343,6 +353,50 @@ export class UserCommand extends Command {
         }
     }
 
+    private async handleRules(interaction: MessageComponentInteraction) {
+        const { guildId } = interaction;
+        if (!guildId) return;
+
+        const creators = await db.select().from(creatorChannels).where(eq(creatorChannels.guildId, BigInt(guildId))).all();
+
+        if (creators.length === 0) {
+            return interaction.update({
+                content: 'There are no Creator Channels configured in this server. Admins must set them up using `/setup creator add`.',
+                embeds: [],
+                components: [
+                    new ActionRowBuilder<ButtonBuilder>().addComponents(
+                        new ButtonBuilder().setCustomId('settings-btn-back').setLabel('Back to Dashboard').setStyle(ButtonStyle.Secondary)
+                    )
+                ]
+            });
+        }
+
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('settings-rules-select')
+            .setPlaceholder('Pick a channel to edit rules for');
+
+        for (const c of creators) {
+            const channel = interaction.guild?.channels.cache.get(c.id.toString());
+            const label = channel ? `#${channel.name}` : `Channel ${c.id}`;
+            select.addOptions({
+                label,
+                value: c.id.toString(),
+                description: `Default Name: ${c.defaultName}`
+            });
+        }
+
+        const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+        const backBtn = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId('settings-btn-back').setLabel('Back to Dashboard').setStyle(ButtonStyle.Secondary)
+        );
+
+        return interaction.update({
+            content: 'Select which Category you want to define rules for. These rules will be posted when you own a channel in this category.',
+            embeds: [],
+            components: [row, backBtn]
+        });
+    }
+
     private async handleStringSelect(interaction: StringSelectMenuInteraction) {
         const { user, guildId, customId, values } = interaction;
         if (!guildId) return;
@@ -353,25 +407,103 @@ export class UserCommand extends Command {
                 .onConflictDoUpdate({ target: [users.userId, users.guildId], set: { chatRestriction: newVal } });
 
             await this.finalizeUpdate(interaction, 'Chat Restriction');
+            return;
         } else if (customId === 'settings-cmd-restriction') {
             const newVal = values[0];
             await db.insert(users).values({ userId: BigInt(user.id), guildId: BigInt(guildId), commandRestriction: newVal })
                 .onConflictDoUpdate({ target: [users.userId, users.guildId], set: { commandRestriction: newVal } });
 
             await this.finalizeUpdate(interaction, 'Command Access');
+            return;
+        } else if (customId === 'settings-rules-select') {
+            const creatorId = values[0];
+
+            // Fetch existing rules
+            const currentRulesData = await db
+                .select()
+                .from(userRules)
+                .where(and(
+                    eq(userRules.userId, BigInt(user.id)),
+                    eq(userRules.guildId, BigInt(guildId)),
+                    eq(userRules.creatorChannelId, BigInt(creatorId))
+                ))
+                .get();
+
+            const modal = new ModalBuilder()
+                .setCustomId(`settings-modal-rules-${creatorId}`)
+                .setTitle('Edit Group Rules');
+
+            const rulesInput = new TextInputBuilder()
+                .setCustomId('rulesInput')
+                .setLabel("Rules (Markdown supported)")
+                .setStyle(TextInputStyle.Paragraph)
+                .setValue(currentRulesData?.rules || "")
+                .setPlaceholder("Be nice! No rushing!")
+                .setRequired(false)
+                .setMaxLength(1000);
+
+            const row = new ActionRowBuilder<TextInputBuilder>().addComponents(rulesInput);
+            modal.addComponents(row);
+
+            await interaction.showModal(modal);
+
+            try {
+                const submission = await interaction.awaitModalSubmit({
+                    filter: (i) => i.customId === `settings-modal-rules-${creatorId}`,
+                    time: 300_000
+                });
+
+                const rules = submission.fields.getTextInputValue('rulesInput');
+
+                if (!rules) {
+                    await db
+                        .delete(userRules)
+                        .where(and(
+                            eq(userRules.userId, BigInt(user.id)),
+                            eq(userRules.guildId, BigInt(guildId)),
+                            eq(userRules.creatorChannelId, BigInt(creatorId))
+                        ));
+                } else {
+                    await db
+                        .insert(userRules)
+                        .values({
+                            userId: BigInt(user.id),
+                            guildId: BigInt(guildId),
+                            creatorChannelId: BigInt(creatorId),
+                            rules
+                        })
+                        .onConflictDoUpdate({
+                            target: [userRules.userId, userRules.guildId, userRules.creatorChannelId],
+                            set: { rules }
+                        });
+                }
+
+                await this.finalizeUpdate(submission, 'Group Rules');
+            } catch (err) {
+                // Modal timed out or other error
+            }
+            return;
         }
+        return;
     }
 
-    private async finalizeUpdate(interaction: MessageComponentInteraction, label: string) {
+    private async finalizeUpdate(interaction: MessageComponentInteraction | ModalSubmitInteraction, label: string) {
         const { user } = interaction;
-        await interaction.update({
+        const options = {
             content: `✅ Successfully updated your **${label}**.`,
+            embeds: [],
             components: [
                 new ActionRowBuilder<ButtonBuilder>().addComponents(
                     new ButtonBuilder().setCustomId('settings-btn-back').setLabel('Back to Dashboard').setStyle(ButtonStyle.Success)
                 )
             ]
-        });
+        };
+
+        if (interaction.isMessageComponent()) {
+            await interaction.update(options);
+        } else {
+            await interaction.reply({ ...options, ephemeral: true });
+        }
 
         // Reapply permissions if owner is in their channel
         const member = interaction.member as import('discord.js').GuildMember;

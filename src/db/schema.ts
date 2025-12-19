@@ -119,3 +119,16 @@ export const guildStaffRoles = sqliteTable('guild_staff_roles', {
 }, (table) => ({
 	pk: primaryKey({ columns: [table.guildId, table.roleId] })
 }));
+
+export const userRules = sqliteTable('user_rules', {
+	// The User ID who set the rules
+	userId: snowflake('user_id').notNull(),
+	// The Guild ID
+	guildId: snowflake('guild_id').notNull(),
+	// The ID of the creator channel these rules apply to
+	creatorChannelId: snowflake('creator_channel_id').notNull(),
+	// The markdown content of the rules
+	rules: text('rules').notNull()
+}, (table) => ({
+	pk: primaryKey({ columns: [table.userId, table.guildId, table.creatorChannelId] })
+}));
