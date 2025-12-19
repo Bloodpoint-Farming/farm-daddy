@@ -250,7 +250,7 @@ export class UserCommand extends Command {
         );
 
         await interaction.update({
-            content: 'Select who is allowed to chat in your temporary channels.',
+            content: 'Select when outsiders can send messages in your temporary channels.',
             embeds: [],
             components: [row, backBtn]
         });
@@ -298,7 +298,7 @@ export class UserCommand extends Command {
         );
 
         await interaction.update({
-            content: 'Select who is allowed to run `/group` commands in your temporary channels.',
+            content: 'Select who may run `/group` commands in your temporary channels.',
             embeds: [],
             components: [row, backBtn]
         });
