@@ -225,59 +225,14 @@ export class UserCommand extends Subcommand {
     }
 
     public async chatInputPlatform(interaction: Subcommand.ChatInputCommandInteraction) {
-        const member = interaction.guild?.members.cache.get(interaction.user.id);
         const platformKey = interaction.options.getString('platform', true) as PlatformKey;
+        const validated = await this.getValidatedTempChannel(interaction);
+        if (!validated) return;
 
-        if (!member?.voice.channel) {
-            return this.sendAttentionEmbed(interaction);
-        }
-
-        const channel = member.voice.channel;
-
-        // Verify it is a tracked temporary channel
-        const tempChannel = await db
-            .select()
-            .from(tempChannels)
-            .where(eq(tempChannels.id, channel.id))
-            .get();
-
-        if (!tempChannel) {
-            return this.sendAttentionEmbed(interaction);
-        }
-
-        if (!(await this.checkPermission(interaction, tempChannel.ownerId))) {
-            return this.sendNoPermissionEmbed(interaction);
-        }
-
-        // Fetch the creator channel to get the template
-        if (!tempChannel.creatorChannelId) {
-            return interaction.reply({
-                content: 'Unable to determine the creator channel for this temporary channel.',
-                ephemeral: true
-            });
-        }
-
-        const creatorChannel = await db
-            .select()
-            .from(creatorChannels)
-            .where(eq(creatorChannels.id, tempChannel.creatorChannelId))
-            .get();
-
-        if (!creatorChannel) {
-            return interaction.reply({
-                content: 'Creator channel configuration not found.',
-                ephemeral: true
-            });
-        }
+        const { channel, tempChannel, creatorChannel } = validated;
 
         try {
-            // Update DB
-            await db
-                .update(tempChannels)
-                .set({ platform: platformKey })
-                .where(eq(tempChannels.id, channel.id));
-
-            // Update user preferences
+            await db.update(tempChannels).set({ platform: platformKey }).where(eq(tempChannels.id, channel.id));
             await db
                 .insert(users)
                 .values({
@@ -290,77 +245,25 @@ export class UserCommand extends Subcommand {
                     set: { lastPlatform: platformKey }
                 });
 
-            // Regenerate channel name from template
-            const member = interaction.member as import('discord.js').GuildMember;
-            const newName = formatChannelName(creatorChannel.defaultName, member, platformKey, tempChannel.build);
-            this.container.logger.debug(`Renaming channel ${channel.id} to ${newName}`);
-            await channel.setName(newName);
-            this.container.logger.debug(`Renamed channel ${channel.id}`);
+            const newName = formatChannelName(creatorChannel.defaultName, interaction.member as any, platformKey, tempChannel.build);
+            const embed = new EmbedBuilder().setDescription(`Platform set to **${PLATFORMS[platformKey].label}**.`);
 
-            const embed = new EmbedBuilder()
-                .setDescription(`Platform set to **${PLATFORMS[platformKey].label}**.`);
-
-            return interaction.reply({ embeds: [embed] });
+            return this.handleRenameWithFeedback(interaction, channel, newName, embed);
         } catch (error) {
             this.container.logger.error(error);
-            return interaction.reply({ content: 'Failed to update platform. Rate limit or permissions?', ephemeral: true });
+            return interaction.reply({ content: 'Failed to update preferences.', ephemeral: true });
         }
     }
 
     public async chatInputBuild(interaction: Subcommand.ChatInputCommandInteraction) {
-        const member = interaction.guild?.members.cache.get(interaction.user.id);
         const build = interaction.options.getString('build', true);
+        const validated = await this.getValidatedTempChannel(interaction);
+        if (!validated) return;
 
-        if (!member?.voice.channel) {
-            return this.sendAttentionEmbed(interaction);
-        }
-
-        const channel = member.voice.channel;
-
-        // Verify it is a tracked temporary channel
-        const tempChannel = await db
-            .select()
-            .from(tempChannels)
-            .where(eq(tempChannels.id, channel.id))
-            .get();
-
-        if (!tempChannel) {
-            return this.sendAttentionEmbed(interaction);
-        }
-
-        if (!(await this.checkPermission(interaction, tempChannel.ownerId))) {
-            return this.sendNoPermissionEmbed(interaction);
-        }
-
-        // Fetch the creator channel to get the template
-        if (!tempChannel.creatorChannelId) {
-            return interaction.reply({
-                content: 'Unable to determine the creator channel for this temporary channel.',
-                ephemeral: true
-            });
-        }
-
-        const creatorChannel = await db
-            .select()
-            .from(creatorChannels)
-            .where(eq(creatorChannels.id, tempChannel.creatorChannelId))
-            .get();
-
-        if (!creatorChannel) {
-            return interaction.reply({
-                content: 'Creator channel configuration not found.',
-                ephemeral: true
-            });
-        }
+        const { channel, tempChannel, creatorChannel } = validated;
 
         try {
-            // Update DB
-            await db
-                .update(tempChannels)
-                .set({ build })
-                .where(eq(tempChannels.id, channel.id));
-
-            // Update user preferences
+            await db.update(tempChannels).set({ build }).where(eq(tempChannels.id, channel.id));
             await db
                 .insert(users)
                 .values({
@@ -373,23 +276,13 @@ export class UserCommand extends Subcommand {
                     set: { lastBuild: build }
                 });
 
-            // Regenerate channel name from template
-            const member = interaction.member as import('discord.js').GuildMember;
-            const newName = formatChannelName(creatorChannel.defaultName, member, tempChannel.platform as PlatformKey, build);
-            this.container.logger.debug(`Renaming channel ${channel.id} to ${newName}`);
-            await Promise.race([
-                channel.setName(newName),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Channel rename timed out')), 5000))
-            ]);
-            this.container.logger.debug(`Renamed channel ${channel.id}`);
+            const newName = formatChannelName(creatorChannel.defaultName, interaction.member as any, tempChannel.platform as PlatformKey, build);
+            const embed = new EmbedBuilder().setDescription(`Build set to **${build}**.`);
 
-            const embed = new EmbedBuilder()
-                .setDescription(`Build set to **${build}**.`);
-
-            return interaction.reply({ embeds: [embed] });
+            return this.handleRenameWithFeedback(interaction, channel, newName, embed);
         } catch (error) {
             this.container.logger.error(error);
-            return interaction.reply({ content: 'Failed to update build. Rate limit or permissions?', ephemeral: true });
+            return interaction.reply({ content: 'Failed to update preferences.', ephemeral: true });
         }
     }
 
@@ -469,6 +362,89 @@ export class UserCommand extends Subcommand {
         } catch (error) {
             this.container.logger.error(error);
             return interaction.reply({ content: 'Failed to transfer ownership.', ephemeral: true });
+        }
+    }
+    private async getValidatedTempChannel(interaction: Subcommand.ChatInputCommandInteraction) {
+        const member = interaction.guild?.members.cache.get(interaction.user.id);
+        if (!member?.voice.channel) {
+            await this.sendAttentionEmbed(interaction);
+            return null;
+        }
+
+        const channel = member.voice.channel;
+        const tempChannel = await db
+            .select()
+            .from(tempChannels)
+            .where(eq(tempChannels.id, channel.id))
+            .get();
+
+        if (!tempChannel) {
+            await this.sendAttentionEmbed(interaction);
+            return null;
+        }
+
+        if (!(await this.checkPermission(interaction, tempChannel.ownerId))) {
+            await this.sendNoPermissionEmbed(interaction);
+            return null;
+        }
+
+        if (!tempChannel.creatorChannelId) {
+            await interaction.reply({
+                content: 'Unable to determine the creator channel for this temporary channel.',
+                ephemeral: true
+            });
+            return null;
+        }
+
+        const creatorChannel = await db
+            .select()
+            .from(creatorChannels)
+            .where(eq(creatorChannels.id, tempChannel.creatorChannelId))
+            .get();
+
+        if (!creatorChannel) {
+            await interaction.reply({
+                content: 'Creator channel configuration not found.',
+                ephemeral: true
+            });
+            return null;
+        }
+
+        return { channel, tempChannel, creatorChannel };
+    }
+
+    private async handleRenameWithFeedback(
+        interaction: Subcommand.ChatInputCommandInteraction,
+        channel: import('discord.js').VoiceBasedChannel,
+        newName: string,
+        successEmbed: EmbedBuilder
+    ) {
+        try {
+            this.container.logger.debug(`Renaming channel ${channel.id} to ${newName}`);
+            const renamePromise = channel.setName(newName);
+            const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve('timeout'), 1000));
+
+            const result = await Promise.race([renamePromise, timeoutPromise]);
+
+            if (result === 'timeout') {
+                const lateEmbed = EmbedBuilder.from(successEmbed).setFooter({
+                    text: 'Rate limit: Channel will be renamed in < 10 minutes.'
+                });
+
+                await interaction.reply({ embeds: [lateEmbed] });
+                await renamePromise;
+                return interaction.editReply({ embeds: [successEmbed] });
+            }
+
+            this.container.logger.debug(`Renamed channel ${channel.id}`);
+            return interaction.reply({ embeds: [successEmbed] });
+        } catch (error) {
+            const errorContent = 'Failed to update channel name. Rate limit or permissions?';
+            this.container.logger.error(error);
+            if (interaction.replied || interaction.deferred) {
+                return interaction.editReply({ content: errorContent, embeds: [] });
+            }
+            return interaction.reply({ content: errorContent, ephemeral: true });
         }
     }
 }
