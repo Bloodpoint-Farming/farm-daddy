@@ -31,9 +31,11 @@ export async function updateChannelPermissions(channel: VoiceChannel) {
     const staffRoleIds = new Set(staffRoles.map((s) => s.roleId.toString()));
 
     const chatRestriction = ownerSettings?.chatRestriction || 'always';
+    const soundboardRestriction = ownerSettings?.soundboardRestriction || 'anyone';
     const limit = channel.userLimit || 0;
     const isFull = limit > 0 && channel.members.size >= limit;
     const restrictChat = chatRestriction === 'open_spots' && isFull;
+    const allowSoundboard = soundboardRestriction === 'anyone';
 
     // 3. Start with parent category permissions
     const overwrites: OverwriteResolvable[] =
@@ -54,14 +56,24 @@ export async function updateChannelPermissions(channel: VoiceChannel) {
         }
     };
 
-    // 4. Default Chat Access (@everyone)
-    // If restricted, deny chat. Otherwise, explicitly allow it for temp channel consistency.
-    addOverwrite(
-        guild.id,
-        OverwriteType.Role,
-        restrictChat ? 0n : PermissionFlagsBits.SendMessages,
-        restrictChat ? PermissionFlagsBits.SendMessages : 0n
-    );
+    // 4. Default Permissions (@everyone)
+    // Handle Chat and Soundboard access.
+    let everyoneAllow = 0n;
+    let everyoneDeny = 0n;
+
+    if (restrictChat) {
+        everyoneDeny |= PermissionFlagsBits.SendMessages;
+    } else {
+        everyoneAllow |= PermissionFlagsBits.SendMessages;
+    }
+
+    if (allowSoundboard) {
+        everyoneAllow |= PermissionFlagsBits.UseSoundboard | PermissionFlagsBits.UseExternalSounds;
+    } else {
+        everyoneDeny |= PermissionFlagsBits.UseSoundboard | PermissionFlagsBits.UseExternalSounds;
+    }
+
+    addOverwrite(guild.id, OverwriteType.Role, everyoneAllow, everyoneDeny);
 
     // 5. Trusted User Permissions
     // Trusted users always get Move Members, plus chat access if the channel is full.

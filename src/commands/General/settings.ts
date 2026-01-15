@@ -69,12 +69,20 @@ export class UserCommand extends Command {
             else if (cmdRestriction === 'trusted') cmdLabel = '🔒 Only **trusted users** can run `/group` commands.';
             else cmdLabel = '👑 Only **you** can run `/group` commands.';
 
+            const soundboardRestriction = userPref?.soundboardRestriction || 'anyone';
+            const soundboardLabel = soundboardRestriction === 'anyone'
+                ? '✅ **Anyone** can use the soundboard.'
+                : '🚫 **Nobody** can use the soundboard (except you).';
+
             const description = stripIndent`
             ## Chat from Outsiders
             ${chatLabel}
 
             ## Command Access
             ${cmdLabel}
+
+            ## Soundboard
+            ${soundboardLabel}
 
             ## Trust List
             ${trusted.length} trusted users can always chat and join your VC even when full.
@@ -88,7 +96,7 @@ export class UserCommand extends Command {
                 .setColor(Colors.Blue)
                 .setDescription(description);
 
-            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
                 new ButtonBuilder()
                     .setCustomId('settings-btn-chat')
                     .setLabel('Chat Settings')
@@ -97,6 +105,13 @@ export class UserCommand extends Command {
                     .setCustomId('settings-btn-cmd')
                     .setLabel('Command Access')
                     .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('settings-btn-soundboard')
+                    .setLabel('Soundboard')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+
+            const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
                 new ButtonBuilder()
                     .setCustomId('settings-btn-trust')
                     .setLabel('Manage Trust')
@@ -111,7 +126,7 @@ export class UserCommand extends Command {
                     .setStyle(ButtonStyle.Secondary)
             );
 
-            return { content: '', embeds: [embed], components: [row] };
+            return { content: '', embeds: [embed], components: [row1, row2] };
         };
 
         const response = await interaction.reply({
@@ -138,6 +153,8 @@ export class UserCommand extends Command {
                     await this.handleChat(i);
                 } else if (i.customId === 'settings-btn-cmd') {
                     await this.handleCommandAccess(i);
+                } else if (i.customId === 'settings-btn-soundboard') {
+                    await this.handleSoundboard(i);
                 } else if (i.customId === 'settings-btn-rules') {
                     await this.handleRules(i);
                 } else if (i.customId === 'settings-btn-back') {
@@ -179,7 +196,7 @@ export class UserCommand extends Command {
         );
 
         await interaction.update({
-            content: 'Select the users you want to trust. Trusted users can always chat and join your VC even when full.',
+            content: 'Trusted users can always chat and join your VC even when full.',
             embeds: [],
             components: [row, backBtn]
         });
@@ -208,7 +225,7 @@ export class UserCommand extends Command {
         );
 
         await interaction.update({
-            content: 'Select the users you want to block. Blocked users cannot join your channels or send messages.',
+            content: 'Blocked users cannot join your channels or send messages.',
             embeds: [],
             components: [row, backBtn]
         });
@@ -299,6 +316,48 @@ export class UserCommand extends Command {
 
         await interaction.update({
             content: 'Select who may run `/group` commands in your temporary channels.',
+            embeds: [],
+            components: [row, backBtn]
+        });
+    }
+
+    private async handleSoundboard(interaction: MessageComponentInteraction) {
+        const { user, guildId } = interaction;
+        if (!guildId) return;
+
+        const userPref = await db
+            .select()
+            .from(users)
+            .where(and(eq(users.userId, user.id), eq(users.guildId, guildId)))
+            .get();
+
+        const currentVal = userPref?.soundboardRestriction || 'anyone';
+
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('settings-soundboard-restriction')
+            .setPlaceholder('Choose soundboard access')
+            .addOptions([
+                {
+                    label: 'Anyone',
+                    value: 'anyone',
+                    description: 'Anyone can use soundboards and external sounds.',
+                    default: currentVal === 'anyone'
+                },
+                {
+                    label: 'Only Me',
+                    value: 'owner',
+                    description: 'Nobody else can use soundboards.',
+                    default: currentVal === 'owner'
+                }
+            ]);
+
+        const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+        const backBtn = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId('settings-btn-back').setLabel('Back to Dashboard').setStyle(ButtonStyle.Secondary)
+        );
+
+        await interaction.update({
+            content: 'Select who may use Soundboards in your temporary channels. This applies to everyone, including trusted users.',
             embeds: [],
             components: [row, backBtn]
         });
@@ -414,6 +473,13 @@ export class UserCommand extends Command {
                 .onConflictDoUpdate({ target: [users.userId, users.guildId], set: { commandRestriction: newVal } });
 
             await this.finalizeUpdate(interaction, 'Command Access');
+            return;
+        } else if (customId === 'settings-soundboard-restriction') {
+            const newVal = values[0];
+            await db.insert(users).values({ userId: user.id, guildId: guildId, soundboardRestriction: newVal })
+                .onConflictDoUpdate({ target: [users.userId, users.guildId], set: { soundboardRestriction: newVal } });
+
+            await this.finalizeUpdate(interaction, 'Soundboard Settings');
             return;
         } else if (customId === 'settings-rules-select') {
             const creatorId = values[0];
