@@ -115,6 +115,10 @@ export class UserEvent extends Listener {
                         permissionOverwrites
                     });
 
+                    // Move the member to the new channel
+                    // Do this first so that the bot feels responsive.
+                    member.voice.setChannel(newChannel);
+
                     // Track in DB FIRST so updateChannelPermissions can find it
                     await db.insert(tempChannels).values({
                         id: newChannel.id,
@@ -128,9 +132,6 @@ export class UserEvent extends Listener {
 
                     // Update permissions using helper (handles owner settings, staff roles, and dynamic chat)
                     await updateChannelPermissions(newChannel);
-
-                    // Move the member to the new channel
-                    await member.voice.setChannel(newChannel);
 
                     // Get valid command IDs for clickable links
                     const settingsCommand = this.container.client.application?.commands.cache.find((c) => c.name === 'settings');
