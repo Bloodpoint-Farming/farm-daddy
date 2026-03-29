@@ -121,7 +121,6 @@ export async function updateChannelPermissions(channel: VoiceChannel) {
         ownerId.toString(),
         OverwriteType.Member,
         PermissionFlagsBits.Connect |
-        PermissionFlagsBits.ManageChannels |
         PermissionFlagsBits.MoveMembers |
         PermissionFlagsBits.SendMessages
     );
